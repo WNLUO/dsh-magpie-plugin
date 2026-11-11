@@ -1,6 +1,6 @@
 {
   "name": "dsh-magpie-plugin",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "magpie 的独立插件（DSH）：在手机上打开 magpie 自己的界面 —— 宿主半身 + 随包下发的手机扩展",
   "license": "MIT",
@@ -29,6 +29,11 @@
     "dev:reload": "node scripts/reload-dev.mjs",
     "update:check": "node scripts/update-check.mjs",
     "update:install": "node scripts/update-check.mjs --install"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
   },
   "dshMobileExtensions": "extensions",
   "dshMobileDataServices": [
