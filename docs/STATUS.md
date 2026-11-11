@@ -91,9 +91,10 @@ GitHub 都在。往下的每一步都**必须由用户参与**，不是我能自
 
 - `node scripts/reload-dev.mjs` 实跑成功：包已装进本机 profile（`desktop`），285 个文件逐字节对上，
   依赖声明指向 `dsh-magpie-plugin-dev-1794409042778.tgz`。
-- **手动补了一步脚本没做的**：profile 的 `package.json` 里 `dsh.profile.bundles` 原本没有本插件，
-  补进去了（排 `dsh-canvas-plugin` 之后，备份在 `package.json.bak-magpie`）。没这一步，重启宿主
-  也不会加载它 —— 这一步值得回头补进 `scripts/reload-dev.mjs`，别让人每装一次手改一次。
+- profile 的 `dsh.profile.bundles` 原本没有本插件（没这一项重启也不会加载它）。**这一步已经补进
+  脚本**：`lib/update/profile.js` 的 `registerBundle`，`scripts/reload-dev.mjs` 装完自动调用
+  （幂等）。原先手改 profile 的那次已经还原，现在 profile 是脚本装出来的，不是手拼的。
+  见 `docs/decisions.md` 与 `test/bundles.test.mjs`。
 - 已在**真实 profile** 里验证发现链路（不是假目录）：移动端插件扫到了
   `slug=dsh-magpie-plugin.magpie`、`service=dsh-magpie`，入口页与 `icon.png` 都在。
 - 宿主重启前 `/api/dsh-magpie/*` 回 401 —— **注意这不是「路由没挂」的证据**：宿主对 `/api/*`
@@ -109,7 +110,7 @@ GitHub 都在。往下的每一步都**必须由用户参与**，不是我能自
    要看到它，得先做 `docs/app-teardown.md` 里那一步，或者临时从「设置 → 扩展」里确认它已装好。
 4. 点开若数据为空，先查宿主日志与 magpie 网页版进程（`magpie web` 是否起来、端口 3430）。
 
-## 待补：reload-dev 没有登记 bundles
+## 已补：reload-dev 现在会登记 bundles
 
-上面那条手改说明 `scripts/reload-dev.mjs` 少做一件事。下一步应让它装完之后自动把包名
-写进 `dsh.profile.bundles`（已存在就跳过），否则「装好了但重启不生效」会反复出现。
+原来少的那一步已经补上（见 `docs/decisions.md`），并且用脚本重装了一遍验证过：
+`✔ 已登记进启动列表`，第二次跑显示 `· 启动列表里本来就有，跳过`。
