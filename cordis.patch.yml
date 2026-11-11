@@ -1,0 +1,12 @@
+# dsh bundle patch：把 magpie 插件挂进 profile 的层栈。
+#
+# `name` 必须与包名逐字一致：loader 按包名解析，写歪不报错，只是插件永远不会出现在宿主里。
+#
+# 挂上去做两件事：让 `dshMobileExtensions` 与 `dshMobileDataServices` 两份声明被移动端插件
+# 看到（手机扩展因此能被下发、页面因此能经 `host.data` 读到 `/api/dsh-magpie/*`）；
+# 以及在自己的 `inject` 里等 `webServer`，把「打开 magpie」与「代取」两条接口真注册上去
+# （见 index.js）。
+- insert:
+    - id: dsh-magpie
+      name: 'dsh-magpie-plugin'
+      config: {}

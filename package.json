@@ -1,0 +1,59 @@
+{
+  "name": "dsh-magpie-plugin",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "magpie 的独立插件（DSH）：在手机上打开 magpie 自己的界面 —— 宿主半身 + 随包下发的手机扩展",
+  "license": "MIT",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/WNLUO/dsh-magpie-plugin.git"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "engines": {
+    "dsh": ">=0.2.0",
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "test": "node --test test/",
+    "build": "node scripts/build-extension.mjs",
+    "dev:install": "node scripts/dev-install.mjs",
+    "dev:watch": "node scripts/dev-watch.mjs",
+    "dev:reload": "node scripts/reload-dev.mjs",
+    "update:check": "node scripts/update-check.mjs",
+    "update:install": "node scripts/update-check.mjs --install"
+  },
+  "dshMobileExtensions": "extensions",
+  "dshMobileDataServices": [
+    {
+      "service": "dsh-magpie",
+      "allow": [
+        "/api/dsh-magpie/"
+      ]
+    }
+  ],
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "lib/**/*.js",
+    "extensions/**",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "deepseek-harness-plugin",
+    "cordis-plugin",
+    "magpie",
+    "mobile"
+  ]
+}
