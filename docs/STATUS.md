@@ -7,7 +7,10 @@
 新插件（本仓）**技术活已做完**：能装、能挂路由、扩展能被宿主发现、47 条守卫全绿。
 卡在两件只有用户能做的事上：**发 npm**（本机没登录）与**真机验证**（设备要用户点名）。
 
-## 已完成（本地 git，7 版提交，未推远端、未发 npm）
+## 已完成（本地 git + 已推 GitHub 公开仓，9 版提交；**未发 npm**）
+
+- 远程仓：<https://github.com/WNLUO/dsh-magpie-plugin>（`origin`，master 已推，9 个提交）
+- 注意：参考对象 `dsh-canvas-plugin` 那个仓**没有远程**，只在本地 —— 「跟画布做成一样」这一步它自己也没做，别照着它以为只要本地仓。
 
 - 宿主半身：`lib/`（进程管理、透明代取、路由、热重载）、`index.js`、`cordis.patch.yml`
 - 手机扩展：`web/`（上游快照）、`scripts/build-extension.mjs`、`extensions/magpie/`（270 文件 / 10.61MB）
