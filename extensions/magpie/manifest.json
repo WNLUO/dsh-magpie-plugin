@@ -33,5 +33,10 @@
     "match": [
       "/api/dsh-magpie/"
     ]
+  },
+  "entry": {
+    "name": "magpie",
+    "slot": "normal",
+    "icon": true
   }
 }

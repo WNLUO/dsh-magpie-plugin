@@ -65,6 +65,19 @@ test('扩展清单的 hostData 指向 dsh-magpie，且申请了 host.data 能力
     '声明了 hostData 却没申请 host.data 能力，fetch 到不了宿主')
 })
 
+test('扩展声明了右栏入口，且图标真在包里（没这一项，装了在手机上看不到任何入口）', () => {
+  const manifest = JSON.parse(read(declared, 'magpie', 'manifest.json'))
+  const entry = manifest.entry
+  assert.ok(entry && typeof entry === 'object', '清单缺 entry：装完右栏不会出现这一格，用户会以为没装上')
+  assert.equal(typeof entry.name, 'string', 'entry.name 必须是字符串')
+  assert.ok(entry.name.trim().length > 0 && entry.name.trim().length <= 10,
+    `入口名字要在 1~10 个字符之内（右栏每格 60 宽）：${entry.name}`)
+  assert.ok(['first', 'normal', 'last'].includes(entry.slot), `slot 只认三档：${entry.slot}`)
+  assert.equal(entry.icon, true, 'entry.icon 要写真（包里带 icon.png）')
+  assert.ok(fs.existsSync(path.join(EXT_DIR, 'icon.png')),
+    '声明了 icon: true 但包里没有 icon.png —— 右栏那一格会画成空的')
+})
+
 test('扩展产物自包含：不发外部请求，且引用的本地文件都在包里', () => {
   const html = read(declared, 'magpie', 'index.html')
   const refs = [...html.matchAll(/(?:src|href)\s*=\s*["']([^"']+)["']/g)].map((m) => m[1])

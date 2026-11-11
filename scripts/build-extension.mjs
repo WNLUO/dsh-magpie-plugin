@@ -67,6 +67,17 @@ const CAPABILITIES = ['content.read', 'card.write', 'host.data']
 const HOST_DATA = { service: 'dsh-magpie', match: ['/api/dsh-magpie/'] }
 
 /**
+ * 右栏入口声明：装了本插件，手机右侧栏里就多出这一格。
+ *
+ * 不给这一项时扩展照样能装、能从「设置 → 扩展」里打开，但**右栏不会出现** —— 用户装完
+ * 看不到任何入口，会以为没装上。这就是为什么它是必须的一项，不是装饰。
+ *
+ * `icon: true` 表示包里带一张 `icon.png`（产包时从 `web/icons/icon-512.png` 拷一份）：
+ * App 只认这个固定文件名，且只认包里自带的图，不给网络地址。
+ */
+const ENTRY = { name: 'magpie', slot: 'normal', icon: true }
+
+/**
  * 只该留在 `web/` 的本地开发文件，不进扩展包。
  *  - `serve.mjs`：本地开发服务器（DV），上游没有；
  *  - `SOURCE.md`：这份源码快照的来源与改法说明；
@@ -170,6 +181,7 @@ export function buildManifest() {
     description: '在手机上打开 magpie 的完整界面（Agents / Providers / Routing / Usage / Settings）。数据经宿主取。',
     capabilities: CAPABILITIES,
     hostData: HOST_DATA,
+    entry: ENTRY,
   }
 }
 
@@ -190,6 +202,9 @@ export function expectedFiles() {
     out.set(rel, rel === 'index.html' ? buildIndexHtml() : fs.readFileSync(path.join(SRC_DIR, rel)))
   }
   out.set('manifest.json', `${JSON.stringify(buildManifest(), null, 2)}\n`)
+  // 右栏入口那格画的图：App 只认包里这张固定文件名的 `icon.png`（见 ENTRY 的注释）。
+  // 复用页面自带的那张 512 图，不额外造一份。
+  out.set('icon.png', fs.readFileSync(path.join(SRC_DIR, 'icons', 'icon-512.png')))
   return out
 }
 
