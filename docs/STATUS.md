@@ -15,7 +15,8 @@
 - 宿主半身：`lib/`（进程管理、透明代取、路由、热重载）、`index.js`、`cordis.patch.yml`
 - 手机扩展：`web/`（上游快照）、`scripts/build-extension.mjs`、`extensions/magpie/`（270 文件 / 10.61MB）
 - 开发流程：`scripts/`（dev-install、dev-watch、reload-dev、update-check）、`lib/update/`
-- 守卫：`test/` 五份（47 条全绿）+ `README.md` + `docs/decisions.md` + 本文件
+- 守卫：`test/` 六份（47 条全绿）+ `README.md` + `docs/decisions.md` + `docs/app-teardown.md` + 本文件
+- **打包产物已实测**：`npm pack` 出来的 tgz 解包后入口能导入、路由前缀与服务名对得上、扩展清单能被 App 的真实解析器读出入口（`{name:'magpie', slot:'normal', icon:'icon.png'}`）
 
 守卫分四层，缺一层都曾有「真机不对、测试全绿」的病：
 1. `package.test.mjs` —— 包结构（声明、files 白名单、挂载行、名字对齐）
