@@ -36,6 +36,7 @@
  *   node scripts/build-extension.mjs           # 产包到 extensions/magpie
  *   node scripts/build-extension.mjs --check   # 只校验产物与源一致（守卫用，不写盘）
  */
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -209,6 +210,22 @@ export function expectedFiles() {
 }
 
 /** 产包：整份拷进 OUT，覆盖写入合并后的 manifest 与注入过改写的 index.html。 */
+/**
+ * 整包 zip 的落点：与 slug 目录**平级**（`extensions/magpie.zip`）。
+ *
+ * 位置由宿主决定，不是我们挑的：`mobile/extension-catalog.js` 的整包接口读的就是
+ * `<扩展根>/<slug>.zip`。手机装扩展只下这一个包、本地解包 —— 逐文件那条回退已经封了
+ * （用户在 2026-11-11 明确要求），所以这个 zip 是**装得上**的前提，不是优化。
+ */
+const ARCHIVE_FILE = path.join(ROOT, 'extensions', 'magpie.zip')
+
+/** 把产物目录打成 zip（用系统 `zip`，三个桌面系统都有，不引第三方库）。 */
+function packArchive() {
+  fs.rmSync(ARCHIVE_FILE, { force: true })
+  execFileSync('zip', ['-r', '-q', '-X', ARCHIVE_FILE, '.'], { cwd: OUT_DIR })
+  return ARCHIVE_FILE
+}
+
 function build() {
   fs.rmSync(OUT_DIR, { recursive: true, force: true })
   for (const [rel, content] of expectedFiles()) {
@@ -276,5 +293,8 @@ if (isMain) {
     const bytes = files.reduce((sum, rel) => sum + fs.statSync(path.join(dir, rel)).size, 0)
     console.log(`产物：${path.relative(ROOT, dir)}`)
     console.log(`文件数：${files.length}　大小：${(bytes / 1024 / 1024).toFixed(2)} MB`)
+    // 整包：手机装扩展只下它（逐文件那条路已封，见 ARCHIVE_FILE 的注释）。
+    const archive = packArchive()
+    console.log(`整包：${path.relative(ROOT, archive)}（${(fs.statSync(archive).size / 1024 / 1024).toFixed(2)} MB）`)
   }
 }

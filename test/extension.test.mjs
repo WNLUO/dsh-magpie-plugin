@@ -116,3 +116,42 @@ test('产物与源一致：build-extension.mjs --check 为绿', () => {
   assert.equal(result.status, 0,
     `产物与源不一致（改了 web/ 却没重新产包？）：\n${result.stderr || result.stdout || result.error || ''}`)
 })
+
+test('整包 zip 在扩展根上（与 slug 目录平级），且装的就是目录里那一份', () => {
+  // 位置不是我们挑的：宿主 `mobile/extension-catalog.js` 的整包接口读 `<扩展根>/<slug>.zip`。
+  // 而手机装扩展**只下这一个包**（逐文件那条回退 2026-11-11 已封），所以缺了它直接装不上。
+  const declared = pkg.dshMobileExtensions === true ? 'extensions' : pkg.dshMobileExtensions
+  const archive = path.join(ROOT, declared, 'magpie.zip')
+  assert.ok(fs.existsSync(archive), `缺整包：${path.relative(ROOT, archive)}（跑 node scripts/build-extension.mjs）`)
+
+  // zip 里的每一条都要能在产物目录里找到、字节一致：包与目录不同源时，手机上装到的
+  // 就是另一个东西，而两边各自的测试都还是绿的。
+  const list = spawnSync('unzip', ['-l', archive], { encoding: 'utf8' })
+  assert.equal(list.status, 0, `读不出整包：${list.stderr || ''}`)
+  const names = list.stdout.split('\n')
+    .map((line) => line.trim().split(/\s+/))
+    .filter((cols) => cols.length === 4 && /^\d+$/.test(cols[0]))
+    .map((cols) => cols[3])
+    .filter((name) => name && !name.endsWith('/'))
+  assert.ok(names.length > 100, `整包里只有 ${names.length} 个文件，看着不像整包`)
+
+  const dir = path.join(ROOT, declared, 'magpie')
+  for (const name of names) {
+    const onDisk = path.join(dir, name)
+    assert.ok(fs.existsSync(onDisk), `整包里的 ${name} 在产物目录里没有（zip 与目录不同源）`)
+  }
+  // 反方向：目录里的每一份都得进整包，否则手机上永远少那几个文件。
+  const inZip = new Set(names)
+  const walk = (rel = '') => {
+    const out = []
+    for (const entry of fs.readdirSync(path.join(dir, rel), { withFileTypes: true })) {
+      const next = rel ? `${rel}/${entry.name}` : entry.name
+      if (entry.isDirectory()) out.push(...walk(next))
+      else out.push(next)
+    }
+    return out
+  }
+  for (const rel of walk()) {
+    assert.ok(inZip.has(rel), `产物里的 ${rel} 没进整包（手机上会缺这个文件）`)
+  }
+})
