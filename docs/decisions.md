@@ -52,3 +52,18 @@ magpie 的响应。4xx/5xx 也照原样透传，让页面按普通 Response 判�
 
 老版本 App 的 magpie 走的还是移动端插件那条老路，删了老用户当场打不开。所以新插件先铺、
 几版之后再清移动端插件里那份。
+
+## 装进 profile 之后必须自己登记启动项
+
+`pnpm install` 只做两件事：把包装进 `node_modules`、把依赖写进 `dependencies`。它**不会**
+让宿主加载这个插件 —— 决定加载的是 profile `package.json` 里的 `dsh.profile.bundles`
+（`dsh-canvas-plugin` 这些也都在那一份名单上）。
+
+早先这一版漏了这步，现场表现是「装好了、285 个文件逐字节都对上、重启还是不生效」，而且
+从包本身查不出任何问题；当时是靠手工改 profile 的 `package.json` 绕过去的 —— 那是野路子，
+不是做法：它绕过了宿主自己的插件管理器（手机那侧安装走 `pluginManager.installBundle`，
+最终改的就是这份名单），也让「装一次」变成「装一次再手改一次」。
+
+现在 `scripts/reload-dev.mjs` 装完会调 `lib/update/profile.js` 的 `registerBundle`：追加 +
+幂等，不认识或不相关的字段一律原样保留，读不出 profile 声明时如实提示而不是假装成功。
+`test/bundles.test.mjs` 钉住「会调、幂等、不碰别的字段、读不出要说出来」四件事。

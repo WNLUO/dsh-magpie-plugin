@@ -44,6 +44,7 @@ import {
   packageVersion,
   profileDir,
   profileName,
+  registerBundle,
   runCommand,
   runtimePnpm,
 } from '../lib/update/profile.js'
@@ -266,6 +267,18 @@ async function main() {
     fail(`profile 的依赖声明没指到 ${devName}：重启会退回旧的一份，这一轮白做。`)
   }
   say(`✔ 已装进 profile：${PKG.version}（${files.length} 个文件逐字节对上，声明指向 ${devName}）`)
+
+  // 让它成为宿主的启动项 —— `pnpm install` 只进 node_modules 与依赖表，**不进**启动列表。
+  // 少了这一步的现场是「装好了、也逐字节对上了、重启还是没加载」，从包本身查不出来。
+  const registered = registerBundle(target, PKG_NAME)
+  if (registered === null) {
+    warn(`△ 读不出 profile 的 ${path.join(target, 'package.json')}，没法自动登记启动项；`)
+    warn('  重启宿主前请确认 dsh.profile.bundles 里有这一项，否则它不会被加载。')
+  } else if (registered.changed) {
+    say(`✔ 已登记进启动列表（dsh.profile.bundles），重启后会被加载`)
+  } else {
+    say('· 启动列表里本来就有，跳过')
+  }
 
   const reload = await reloadInPlace({ explicitPort: Number(flagValue('port')) || null })
   if (reload.status === 'reloaded') {
