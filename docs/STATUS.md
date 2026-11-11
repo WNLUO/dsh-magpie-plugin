@@ -7,9 +7,9 @@
 - 宿主半身：`lib/`（进程管理、透明代取、路由、热重载）、`index.js`、`cordis.patch.yml`
 - 手机扩展：`web/`（上游快照）、`scripts/build-extension.mjs`、`extensions/magpie/`（269 文件 / 10.57MB）
 - 开发流程：`scripts/`（dev-install、dev-watch、reload-dev、update-check）、`lib/update/`
-- 守卫：`test/`（39 条全绿）+ `README.md` + `docs/decisions.md`
+- 守卫：`test/`（42 条全绿）+ `README.md` + `docs/decisions.md`
 
-验证过的：`node --test test/` 39/39、`build-extension.mjs --check` 绿、`npm pack --dry-run` 内容齐（挂载行/文档/扩展都在）、dev-install / dev-watch --once / reload-dev --dry-run / update-check 都能跑。
+验证过的：`node --test test/` 42/42、`build-extension.mjs --check` 绿、`npm pack --dry-run` 内容齐（挂载行/文档/扩展都在）、dev-install / dev-watch --once / reload-dev --dry-run / update-check 都能跑。
 
 ## 卡点（需要用户参与，不是技术问题）
 
