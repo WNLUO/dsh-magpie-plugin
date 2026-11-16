@@ -132,3 +132,35 @@ test('边界：magpie 不可用时回 503 且说明原因，不抛 500', async (
     assert.match(res.body, /no-magpie/)
   } finally { host.server.close() }
 })
+
+test('插件页那棵子树也走同一条透明代理：前缀剥掉、原路径转给 magpie', async () => {
+  // 插件页（/_magpie/plugin/<hash>/…）是 magpie 现场生成的，不在扩展包的快照里 —— 手机要看
+  // 只能由这边端出去。与 /api/ 一样必须是透明代理：路径原样转、状态码与 content-type 原样回。
+  const magpie = await fakeMagpie()
+  const routes = createRoutes({ ensureWebFn: async () => ({ available: true, port: magpie.port, key: 'k' }), cookieFn: async () => '' })
+  const host = await hostWith(routes)
+  try {
+    const res = await request(host.port, `${ROUTE_PREFIX}/_magpie/plugin/abc123/index.html`)
+    assert.equal(res.status, 207, '上游状态码原样透传')
+    const echoed = JSON.parse(res.body)
+    assert.equal(echoed.seenPath, '/_magpie/plugin/abc123/index.html', '前缀剥掉之后剩下的路径要原样交给 magpie')
+  } finally {
+    magpie.server.closeAllConnections?.()
+    magpie.server.close()
+    host.server.close()
+  }
+})
+
+test('变异对照：只放开 /api/ 时，插件页那条前缀会被拒（不该是 200 的透传）', async () => {
+  const magpie = await fakeMagpie()
+  const routes = createRoutes({ ensureWebFn: async () => ({ available: true, port: magpie.port, key: 'k' }), cookieFn: async () => '' })
+  const host = await hostWith(routes)
+  try {
+    const res = await request(host.port, `${ROUTE_PREFIX}/__nope/x`)
+    assert.notEqual(res.status, 207, '没放开的子树不代理')
+  } finally {
+    magpie.server.closeAllConnections?.()
+    magpie.server.close()
+    host.server.close()
+  }
+})
