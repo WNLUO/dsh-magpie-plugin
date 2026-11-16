@@ -190,38 +190,52 @@ test('「复制」那一发不出页面：请电脑复制被挡成失败，正�
   assert.equal(calls[1], 'https://example.com/x.json', '外链必须原样放行')
 })
 
-test('取数通道没装上时，页面自己说清原因，而不是丢一句 failed to fetch', async () => {
+test('首屏取数会等宿主那段拦截，等不到就如实失败——都不往页面上画东西', async () => {
   // 真机上遇到的那种：页面显示得出来、数据全取不到，屏幕上只有一句 "failed to fetch"。
-  // 真正的原因（记录里没有 hostData、能力没授予）从页面里看不出来，所以注入脚本自检一次，
-  // 把原因画在页面上，并且**不让那一发去打一个注定失败的地址**。
+  // 两个原因都在这里钉住：一是宿主那段拦截是页面加载后才注入的，页面首屏请求可能比它早；
+  // 二是它可能包在我们这一层外面（顺序反过来），那时必须把改写过的地址交给最外层那个 fetch。
+  // 无论哪种，都不许往用户脸上画东西 —— 现场只留在控制台与一个属性上。
   const html = read(declared, 'magpie', 'index.html')
   const injected = html.match(/<script>([\s\S]*?)<\/script>/)
   assert.ok(injected)
-  const calls = []
-  const banners = []
-  const fakeWindow = {
-    // 一条「老的」记录：只有内容能力，没有 host.data；宿主的取数拦截因此没装上。
-    __DSH_EXTENSION__: { capabilities: ['content.read'] },
-    fetch: (input) => {
-      calls.push(typeof input === 'string' ? input : String(input))
-      return Promise.resolve({ ok: true, status: 200 })
-    },
-  }
-  const fakeDocument = {
-    body: { appendChild: (node) => banners.push(node) },
-    documentElement: { appendChild: (node) => banners.push(node) },
-    createElement: () => ({ setAttribute() {}, style: {}, textContent: '' }),
-  }
-  new Function('window', 'Response', 'document', injected[1])(fakeWindow, globalThis.Response, fakeDocument)
 
-  const res = await fakeWindow.fetch('/api/state')
-  assert.equal(res.status, 503, '通道不在时回一个明确的失败响应')
-  assert.equal((await res.json()).code, 'host-channel-missing')
-  assert.deepEqual(calls, [], '别再让那一发去打一个注定失败的地址')
-  assert.equal(banners.length, 1, '页面上要画一条说明')
-  assert.match(banners[0].textContent, /没有被授予「读宿主数据」/)
+  // 一、桥晚一点才到：等到之后照常走宿主，不打 file://。
+  {
+    const calls = []
+    const fakeWindow = {
+      __DSH_EXTENSION__: { capabilities: ['content.read', 'host.data'] },
+      fetch: (input) => { calls.push(String(input)); return Promise.resolve({ ok: true, status: 200 }); },
+    }
+    new Function('window', 'Response', 'document', injected[1])(fakeWindow, globalThis.Response, {
+      documentElement: { setAttribute() {} },
+    })
+    // 页面发第一发之后，宿主那段拦截才装上（真机上就是这一拍）。
+    setTimeout(() => {
+      fakeWindow.__dshHostFetch = () => Promise.resolve({ ok: true, status: 200 });
+      fakeWindow.fetch = (input) => { calls.push('host:' + String(input)); return Promise.resolve({ ok: true, status: 200 }); };
+    }, 60)
+    const res = await fakeWindow.fetch('/api/state')
+    assert.equal(res.status, 200, '等到了桥就照常取数')
+    assert.deepEqual(calls, ['host:/api/dsh-magpie/api/state'], '必须交给最外层（宿主那层）那个 fetch，且地址已改写')
+  }
 
-  // 第二条请求不再重复画（同一条说明画一次就够）
-  await fakeWindow.fetch('/api/agents')
-  assert.equal(banners.length, 1)
+  // 二、等不到桥：回一个带 code 的失败响应，不画东西，只留现场。
+  {
+    const calls = []
+    const attrs = {}
+    const fakeWindow = {
+      __DSH_EXTENSION__: { capabilities: ['content.read'] },
+      fetch: (input) => { calls.push(String(input)); return Promise.resolve({ ok: true, status: 200 }); },
+      console: { error() {} },
+    }
+    new Function('window', 'Response', 'document', injected[1])(fakeWindow, globalThis.Response, {
+      documentElement: { setAttribute: (k, v) => { attrs[k] = v; } },
+    })
+    const res = await fakeWindow.fetch('/api/agents')
+    assert.equal(res.status, 503)
+    assert.equal((await res.json()).code, 'host-channel-missing')
+    assert.deepEqual(calls, [], '别再让那一发去打一个注定失败的地址')
+    assert.ok(attrs['data-dsh-host-missing'], '原因要留给现场')
+    assert.equal(fakeWindow.__dshHostComplained, undefined, '不许再往页面上画条子')
+  }
 })

@@ -23,56 +23,59 @@
     if (p.indexOf(prefix + '/') === 0 || p === prefix) return p;
     return isApiPath(p) ? prefix + p : p;
   }
-  // 「取数通道没装上」的自我说明。
+  // 取数通道的两件保险。
   //
-  // 这一页能显示、数据全取不到时，手机上只会是一句 "failed to fetch" —— 而真正的原因（这条
-  // 记录里没有 hostData 声明、能力没授予、页面不是从扩展入口打开的）在页面里一点都看不出来，
-  // 每查一次都要人肉来回猜。所以自检一次，把原因直接写到页面上。
-  function hostDataMissing() {
-    var ctx = window.__DSH_EXTENSION__;
-    if (!ctx) return '这一页不是从扩展入口打开的（App 没注入桥）';
-    if (typeof window.__dshHostFetch !== 'function') {
-      var caps = ctx.capabilities || [];
-      if (caps.indexOf('host.data') < 0) return '这条记录没有被授予「读宿主数据」';
-      return '这条记录里没有 hostData 声明（装的时候没落进去，或者这是一条很老的记录）';
-    }
-    return '';
+  // 一、**首屏那几发要等桥**。宿主那段拦截是 App 在页面加载后注入的，页面自己的首屏请求
+  //     可能比它早 —— 那时 __dshHostFetch 还没有，几发请求就会打到 file:// 上，手机上只剩
+  //     一句 "failed to fetch"，而页面看起来完全正常。所以命中前缀的请求先等一下（最多
+  //     BRIDGE_WAIT_MS），等到了就跟它走。
+  // 二、**顺序可能反过来**。App 的拦截会包在 window.fetch 外面；如果它比我们晚装，它包的
+  //     就是我们这一层 —— 那种情况下必须把改写过之后的地址交给「当前最外层」那个 fetch，
+  //     否则它按没改写过的前缀去匹配，永远匹配不上。所以这里每次都现看样子，不缓存结论。
+  // 全程不往页面上画任何东西：这是给开发者的现场信息，不是给用户的提示。
+  var BRIDGE_WAIT_MS = 1500;
+  function bridgeReady() {
+    return typeof window.__dshHostFetch === 'function';
   }
-  function complain(reason) {
-    if (window.__dshHostComplained) return;
-    window.__dshHostComplained = true;
-    try {
-      var box = document.createElement('div');
-      box.setAttribute('data-dsh-host-missing', '1');
-      box.style.cssText = 'position:fixed;z-index:2147483647;left:0;right:0;top:0;padding:10px 14px;'
-        + 'background:#7a1f1f;color:#fff;font:13px/1.5 -apple-system,system-ui,sans-serif;'
-        + 'white-space:normal;';
-      box.textContent = '取数通道没装上：' + reason
-        + '。页面能显示、数据取不到 —— 重装这个扩展一般就好；重装之后还在，就是插件那侧的问题。';
-      (document.body || document.documentElement).appendChild(box);
-    } catch (e) {
-      /* 画不出来也不能影响页面 */
-    }
+  function outermostFetch() {
+    return window.fetch && window.fetch !== wrapped ? window.fetch : nativeFetch;
   }
-  window.fetch = function (input, init) {
+  function waitForBridge(deadline) {
+    return new Promise(function (resolve) {
+      (function poll() {
+        if (bridgeReady()) return resolve(true);
+        if (Date.now() > deadline) return resolve(false);
+        setTimeout(poll, 40);
+      })();
+    });
+  }
+  var nativeFetch = original;
+  var wrapped = function (input, init) {
     if (typeof input === 'string') {
       var next = moved(input);
       if (next === copyPath) return Promise.resolve(new Response('', { status: 501 }));
       if (next !== input) {
-        // 这条请求本该走宿主通道；通道不在就地说明，别再让它去打一个注定失败的地址。
-        var reason = hostDataMissing();
-        if (reason) {
-          complain(reason);
-          return Promise.resolve(new Response(
-            JSON.stringify({ code: 'host-channel-missing', message: reason }),
-            { status: 503, headers: { 'content-type': 'application/json' } },
-          ));
-        }
+        return waitForBridge(Date.now() + BRIDGE_WAIT_MS).then(function (ok) {
+          if (!ok) {
+            // 等不到就如实失败，并且把原因留给现场（控制台 + 一个属性），不画在用户脸上。
+            var reason = '取数通道没装上（HostFetch 不在）';
+            try {
+              document.documentElement.setAttribute('data-dsh-host-missing', reason);
+              if (window.console && console.error) console.error('[dsh] ' + reason + '：' + next);
+            } catch (e) { /* 留不下现场也不能影响页面 */ }
+            return new Response(
+              JSON.stringify({ code: 'host-channel-missing', message: reason }),
+              { status: 503, headers: { 'content-type': 'application/json' } },
+            );
+          }
+          return outermostFetch().call(this, next, init);
+        });
       }
-      return next === input ? original.call(this, input, init) : original.call(this, next, init);
+      return nativeFetch.call(this, input, init);
     }
-    return original.call(this, input, init);
+    return nativeFetch.call(this, input, init);
   };
+  window.fetch = wrapped;
 })();
 </script>
 
