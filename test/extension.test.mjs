@@ -278,3 +278,37 @@ test('页面里的报错静默送到插件那条旁路，界面上什么都不�
   assert.equal(sent.length, 2)
   assert.equal(sent[1].body.kind, 'rejection')
 })
+
+test('页面自己上报给 App 的错，顺手抄一份到旁路并补上栈', () => {
+  // 页面里的错误多数是页面自己 catch 住、再用一条 kind 为 error 的消息报给 App 的 —— 那种情况
+  // 全局的 error 钩子不会响，而消息里只有一句话，没有栈。所以那一发也要抄一份。
+  const html = read(declared, 'magpie', 'index.html')
+  const injected = html.match(/<script>([\s\S]*?)<\/script>/)
+  assert.ok(injected)
+  const sent = []
+  const posted = []
+  const fakeWindow = {
+    __DSH_EXTENSION__: { capabilities: ['content.read', 'host.data'] },
+    __dshHostFetch: (service, url, opts) => {
+      sent.push({ service, url, body: JSON.parse(opts.body) })
+      return Promise.resolve({ ok: true, status: 200 })
+    },
+    ReactNativeWebView: { postMessage: (raw) => posted.push(raw) },
+    addEventListener() {},
+    fetch: () => Promise.resolve({ ok: true, status: 200 }),
+  }
+  new Function('window', 'Response', 'document', injected[1])(fakeWindow, globalThis.Response, {
+    documentElement: { setAttribute() {} },
+  })
+
+  fakeWindow.ReactNativeWebView.postMessage(JSON.stringify({ kind: 'error', message: "Cannot read properties of null (reading 'length')" }))
+  assert.deepEqual(posted.length, 1, '原样放行给 App，不能吞掉')
+  assert.equal(sent.length, 1, '要抄一份到旁路')
+  assert.equal(sent[0].url, '/api/dsh-magpie/__diag')
+  assert.equal(sent[0].body.kind, 'reported')
+  assert.match(sent[0].body.stack, /at /, '要补上报那一刻的栈，否则还是查不出哪一段在报')
+
+  // 不是报错的消息不该抄（比如 ready / card 这种，抄了就是噪音）
+  fakeWindow.ReactNativeWebView.postMessage(JSON.stringify({ kind: 'ready' }))
+  assert.equal(sent.length, 1)
+})

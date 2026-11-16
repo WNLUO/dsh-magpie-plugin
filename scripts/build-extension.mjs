@@ -52,7 +52,7 @@ export const EXTENSION_ID = 'com.dsh.magpie.extension'
 /** 扩展接口版本：只在「App 给扩展的东西变了」时抬（与 App RUNTIME_VERSION 无关）。 */
 export const EXTENSION_API_VERSION = '1'
 /** 扩展自己的版本号，不跟插件版本走：只有扩展包内容变了才抬。 */
-const EXTENSION_VERSION = '1.0.4'
+const EXTENSION_VERSION = '1.0.5'
 
 /**
  * 这个扩展声明要哪几项能力。
@@ -224,6 +224,28 @@ function rewriteShimScript() {
       stack: reason && reason.stack ? String(reason.stack) : '',
     });
   });
+  // 页面自己会把错误上报给 App（kind 为 error 的那种消息），可它只带一句话、不带栈 —— 手机上
+  // 一句 "Cannot read properties of null" 就能查到天荒地老。这里把那一发顺手抄一份到旁路，
+  // 并补上「上报那一刻的栈」：它指到的不是抛出点，而是哪一段代码在报错，通常够定位了。
+  var postBridge = window.ReactNativeWebView;
+  if (postBridge && typeof postBridge.postMessage === 'function') {
+    var nativePost = postBridge.postMessage.bind(postBridge);
+    postBridge.postMessage = function (raw) {
+      try {
+        var msg = typeof raw === 'string' ? JSON.parse(raw) : null;
+        if (msg && msg.kind === 'error') {
+          sendDiag({
+            kind: 'reported',
+            message: String(msg.message || ''),
+            stack: (new Error('reported')).stack || '',
+          });
+        }
+      } catch (e) {
+        /* 解析不出来就原样放行 */
+      }
+      return nativePost(raw);
+    };
+  }
   window.fetch = wrapped;
 })();
 </script>`
