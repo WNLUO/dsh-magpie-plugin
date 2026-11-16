@@ -368,7 +368,17 @@
   // can't know the address a reverse proxy that keeps no Host serves it
   // at. The desktop window's scheme is the server's own to name.
   function framed(url) {
-    return /^https?:$/.test(location.protocol) ? url + (url.includes("?") ? "&" : "?") + "_o=" + encodeURIComponent(location.origin) : url;
+    if (/^https?:$/.test(location.protocol)) {
+      return url + (url.includes("?") ? "&" : "?") + "_o=" + encodeURIComponent(location.origin);
+    }
+    // 扩展里这一页是从本地文件打开的（file://）。插件页是电脑上 magpie 现场生成的**站点绝对
+    // 路径**（/_magpie/plugin/<hash>/…）：在这里它变成了一个不存在的本地文件，浏览器只会甩
+    // 一张 ERR_FILE_NOT_FOUND。与其留这张错误页，不如说清它只能在电脑上开（见 SOURCE.md 第 8 条）。
+    const notice = '<!doctype html><meta charset="utf-8">'
+      + '<body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;'
+      + 'font:14px/1.6 -apple-system,system-ui,sans-serif;color:#8a8f98;background:transparent;text-align:center">'
+      + '<p style="max-width:22em;padding:0 1.5em">插件页只能在电脑上打开。<br>Its page is served by magpie on the computer.</p>';
+    return "data:text/html;charset=utf-8," + encodeURIComponent(notice);
   }
 
   // a panel's frame in body, told context once it says hello
