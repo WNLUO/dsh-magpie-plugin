@@ -52,7 +52,7 @@ export const EXTENSION_ID = 'com.dsh.magpie.extension'
 /** 扩展接口版本：只在「App 给扩展的东西变了」时抬（与 App RUNTIME_VERSION 无关）。 */
 export const EXTENSION_API_VERSION = '1'
 /** 扩展自己的版本号，不跟插件版本走：只有扩展包内容变了才抬。 */
-const EXTENSION_VERSION = '1.0.3'
+const EXTENSION_VERSION = '1.0.4'
 
 /**
  * 这个扩展声明要哪几项能力。
@@ -191,6 +191,39 @@ function rewriteShimScript() {
     }
     return nativeFetch.call(this, input, init);
   };
+  // 页面里的报错静默上报。手机上只剩 App 的一句提示，没有栈、没有位置，作者那边就永远查不到；
+  // 走宿主的取数通道送到插件那条旁路，落一行到电脑上的文件里。全程不进界面。
+  function sendDiag(entry) {
+    try {
+      if (!bridgeReady()) return;
+      window.__dshHostFetch(${JSON.stringify(HOST_DATA.service)}, prefix + '/__diag', {
+        method: 'POST',
+        body: JSON.stringify(entry),
+        contentType: 'application/json',
+      }).catch(function () {});
+    } catch (e) {
+      /* 上报失败不该变成页面的另一个错误 */
+    }
+  }
+  window.addEventListener('error', function (event) {
+    var err = event && event.error;
+    sendDiag({
+      kind: 'error',
+      message: String((event && event.message) || ''),
+      source: String((event && event.filename) || ''),
+      line: (event && event.lineno) || 0,
+      column: (event && event.colno) || 0,
+      stack: err && err.stack ? String(err.stack) : '',
+    });
+  });
+  window.addEventListener('unhandledrejection', function (event) {
+    var reason = event && event.reason;
+    sendDiag({
+      kind: 'rejection',
+      message: String((reason && reason.message) || reason || ''),
+      stack: reason && reason.stack ? String(reason.stack) : '',
+    });
+  });
   window.fetch = wrapped;
 })();
 </script>`

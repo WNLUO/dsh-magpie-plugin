@@ -171,6 +171,7 @@ test('「复制」那一发不出页面：请电脑复制被挡成失败，正�
     // 一条「健康」的记录：能力给了、宿主取数通道也装上了（`__dshHostFetch` 在）。
     __DSH_EXTENSION__: { capabilities: ['content.read', 'card.write', 'host.data'] },
     __dshHostFetch: () => Promise.resolve({ ok: true, status: 200 }),
+    addEventListener() {},
     fetch: (input) => {
       calls.push(typeof input === 'string' ? input : String(input))
       return Promise.resolve({ ok: true, status: 200 })
@@ -204,6 +205,7 @@ test('首屏取数会等宿主那段拦截，等不到就如实失败——都�
     const calls = []
     const fakeWindow = {
       __DSH_EXTENSION__: { capabilities: ['content.read', 'host.data'] },
+      addEventListener() {},
       fetch: (input) => { calls.push(String(input)); return Promise.resolve({ ok: true, status: 200 }); },
     }
     new Function('window', 'Response', 'document', injected[1])(fakeWindow, globalThis.Response, {
@@ -225,6 +227,7 @@ test('首屏取数会等宿主那段拦截，等不到就如实失败——都�
     const attrs = {}
     const fakeWindow = {
       __DSH_EXTENSION__: { capabilities: ['content.read'] },
+      addEventListener() {},
       fetch: (input) => { calls.push(String(input)); return Promise.resolve({ ok: true, status: 200 }); },
       console: { error() {} },
     }
@@ -238,4 +241,40 @@ test('首屏取数会等宿主那段拦截，等不到就如实失败——都�
     assert.ok(attrs['data-dsh-host-missing'], '原因要留给现场')
     assert.equal(fakeWindow.__dshHostComplained, undefined, '不许再往页面上画条子')
   }
+})
+
+test('页面里的报错静默送到插件那条旁路，界面上什么都不出来', () => {
+  // 手机上「Cannot read properties of null」只剩一句提示、没有栈 —— 作者就永远查不到。
+  // 注入脚本把 `error` / `unhandledrejection` 静默报到 `/__diag`，落一行到电脑上的文件里。
+  const html = read(declared, 'magpie', 'index.html')
+  const injected = html.match(/<script>([\s\S]*?)<\/script>/)
+  assert.ok(injected)
+  const sent = []
+  const listeners = {}
+  const fakeWindow = {
+    __DSH_EXTENSION__: { capabilities: ['content.read', 'host.data'] },
+    __dshHostFetch: (service, url, opts) => {
+      sent.push({ service, url, body: JSON.parse(opts.body) })
+      return Promise.resolve({ ok: true, status: 200 })
+    },
+    addEventListener: (name, fn) => { listeners[name] = fn },
+    fetch: () => Promise.resolve({ ok: true, status: 200 }),
+  }
+  new Function('window', 'Response', 'document', injected[1])(fakeWindow, globalThis.Response, {
+    documentElement: { setAttribute() {} },
+  })
+
+  const err = new Error("Cannot read properties of null (reading 'length')")
+  err.stack = 'TypeError: x\n    at renderQuotas (app.js:42:7)'
+  listeners.error({ message: err.message, filename: 'file:///x/app.js', lineno: 42, colno: 7, error: err })
+  assert.equal(sent.length, 1, '报错要送出去')
+  assert.equal(sent[0].service, 'dsh-magpie')
+  assert.equal(sent[0].url, '/api/dsh-magpie/__diag')
+  assert.equal(sent[0].body.kind, 'error')
+  assert.equal(sent[0].body.line, 42)
+  assert.match(sent[0].body.stack, /renderQuotas/, '栈必须带上，否则这条通道没有意义')
+
+  listeners.unhandledrejection({ reason: new Error('boom') })
+  assert.equal(sent.length, 2)
+  assert.equal(sent[1].body.kind, 'rejection')
 })
