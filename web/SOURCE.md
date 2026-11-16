@@ -8,8 +8,26 @@
  * 那个独立进程端出来（默认 `127.0.0.1:3430`），是 magpie 自己的网页界面：Agents / Providers /
  * Routing / Usage / Settings 全在里面。
  *
- * 取的是上游 commit `3441035`（2026-11-07）。原来放在 DSH-mobile 的 `app/vendor/magpie-web/`，
- * 抽成独立插件时整份搬到这里。
+ * 现在是 magpie **0.1.4340** 那一版的页面（2026-11-17 更新；上一份是 0.1.4291 / 上游 commit
+ * `3441035`）。原来放在 DSH-mobile 的 `app/vendor/magpie-web/`，抽成独立插件时整份搬到这里。
+ *
+ * **怎么更新到新版**（Go 把这份前端编进二进制，磁盘上没有目录可拷，所以是「从跑着的 `magpie
+ * web` 抓」而不是从源码拷）：
+ *
+ * 1. 先把本机 magpie 更到新版：`magpie update`（`magpie update check` 只看有什么）。
+ * 2. 起 `magpie web`，用 `~/.dsh/magpie-web-key` 换 cookie：`curl -c jar -o /dev/null
+ *    'http://127.0.0.1:3430/?k=<key>'`，之后带 `-b jar` 取文件。
+ * 3. 按引用关系抓：`index.html` 里 `src` / `href` 指向的本地文件、以及 JS 里
+ *    `import "./x.js"` 这类字符串（别只抓 `index.html` 引到的那些 —— `plugins/*/settings.js`
+ *    是运行时按插件名拼出来 import 的）。缺的用 `curl -b jar` 补，404 的就是上游也没有，别硬造。
+ * 4. **重放「本地改动清单」那几处**（拷贝会覆盖它们）：`app.js` 的 `REMOVED_VIEWS`、
+ *    `app.css` 的两处安全区。
+ * 5. **对齐 `boot.js`**：取一次 `GET /boot.js` 看形状，上游加了新格子就补进来 —— 少一格页面
+ *    读它就是当场抛错（这一版新增了 `pluginConfig`，`look` 与 `featuresOff` 也一直在）。
+ * 6. 产包并跑守卫：`node scripts/build-extension.mjs`，`npm test`（有一条会核对产物里
+ *    `index.html` 引到的文件都在包里）。
+ *
+ * 顺带记一笔：这一版上游把 `icons/openmausbot.svg` 删了，我们跟着删。
  *
  * 这一份只当**源码**用：`node scripts/build-extension.mjs` 把它产成 `extensions/magpie/`，
  * 随插件发给手机。本目录里的东西不会直接进扩展包（见下面「不进包的文件」）。

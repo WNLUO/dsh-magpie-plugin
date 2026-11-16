@@ -92,7 +92,7 @@
 
   // the cache a route's vendor read: its last answer's usage
   function cacheOf(r) {
-    const u = r.usage?.[r.usage.length - 1];
+    const u = r?.usage?.[r.usage.length - 1];
     // a vendor that counts no cache has none to show, not 0% (#3464)
     if (!u || u.cache_unknown) return null;
     const total = (u.in || 0) + (u.cache_read || 0) + (u.cache_write || 0);
@@ -143,16 +143,12 @@
     return g > 0 ? Math.floor(free / g) : null;
   }
 
-  // count words a number with the phrase for one, or for many
   const count = (n, one, many) => n === 1 ? t(one) : t(many, { n });
 
-  // spark draws a session's prompts, request by request, against its
-  // window; the one the card tells of is marked, and a point clicked opens
-  // its request
+  // a session's prompts against its window; a point opens its request
   function spark(series, at, window, onPoint) {
     const W = 240, H = 34, pad = 3;
-    // scaled to the session's peak, so a session that never came near its
-    // window still shows how it grew; the window's line shows once it is near
+    // scaled to its peak; the window's line shows once it is near
     const peak = Math.max(...series.map((p) => p.tokens), 1);
     const top = window && peak > window * 0.6 ? Math.max(window, peak) : peak * 1.2;
     const x = (i) => series.length < 2 ? W / 2 : pad + (i / (series.length - 1)) * (W - pad * 2);
@@ -186,7 +182,9 @@
       if (!onPoint) return;
       const hit = ns("rect", { x: x(i) - Math.max(2, W / series.length / 2), y: 0, width: Math.max(4, W / series.length), height: H, class: "hit" + (on ? " on" : "") });
       const tip = document.createElementNS("http://www.w3.org/2000/svg", "title");
-      tip.textContent = t("Request {n}: {tokens} tokens", { n: i + 1, tokens: fmtK(p.tokens) });
+      const w = p.window || window;
+      tip.textContent = w ? t("Request {n}: {tokens} of {window} ({pct})", { n: i + 1, tokens: fmtK(p.tokens), window: fmtK(w), pct: pct(p.tokens / w) })
+        : t("Request {n}: {tokens} tokens", { n: i + 1, tokens: fmtK(p.tokens) });
       hit.append(tip);
       hit.onclick = (e) => { e.stopPropagation(); onPoint(p); };
     });
@@ -396,7 +394,9 @@
 
   // ctxCard draws a route's prompt. opts: series (the session's prompts,
   // [{id, tokens, time}]), onPoint (a point of it clicked), cache ({read,
-  // total}, when the route carries no usage), crumbs (the footer's path),
+  // total}, when the route carries no usage), session (the key of the
+  // session it is of), prev (that session's last answered request, whose
+  // cache a request under way shows), crumbs (the footer's path),
   // place (for its width: see cardWidth). The card's ctxUpdate(r, opts)
   // draws another route in it, keeping the nodes that are the same (grid
   // cells too), so nothing flashes and the grid keeps its height.
@@ -613,14 +613,14 @@
         n.style.height = `max(0px, calc(${pc(tl.h, H)}% - 3px))`;
         if (quiet || !n.animate || !(fresh || enter)) return;
         n.animate([{ opacity: 0, transform: "scale(.94)", filter: "blur(4px)" }, { opacity: 1, transform: "none", filter: "none" }],
-          { duration: 560, easing: IOS_EASE, delay: enter ? 40 + Math.min(i, 16) * 32 : 0, fill: "backwards" });
+          { duration: 380, easing: IOS_EASE, delay: enter ? 30 + Math.min(i, 16) * 20 : 0, fill: "backwards" });
       });
       for (const [k, n] of tiles) {
         if (seen.has(k)) continue;
         tiles.delete(k);
         n.classList.add("gone");
         if (quiet || !n.animate) { n.remove(); continue; }
-        n.animate([{ opacity: 1 }, { opacity: 0, transform: "scale(.96)" }], { duration: 260, easing: IOS_EASE, fill: "forwards" })
+        n.animate([{ opacity: 1 }, { opacity: 0, transform: "scale(.96)" }], { duration: 180, easing: IOS_EASE, fill: "forwards" })
           .finished.then(() => n.remove(), () => n.remove());
       }
     };
@@ -653,7 +653,7 @@
       const h1 = viz.offsetHeight;
       if (h0 !== h1) {
         viz.style.overflow = "hidden";
-        viz.animate([{ height: h0 + "px" }, { height: h1 + "px" }], { duration: 520, easing: IOS_EASE })
+        viz.animate([{ height: h0 + "px" }, { height: h1 + "px" }], { duration: 340, easing: IOS_EASE })
           .finished.finally(() => { viz.style.overflow = ""; }).catch(() => {});
       }
     };
@@ -805,12 +805,10 @@
       k.append(el("span", "", t("Context used")));
       if (window) {
         const [tone, word] = health(full);
-        const h = el("span", "ctx-health " + tone, t(word));
-        k.append(h);
+        k.append(el("span", "ctx-health " + tone, t(word)));
       }
       const big = el("div", "ctx-big");
-      big.append(num("b", "", p.tokens));
-      big.append(el("span", "", window ? "/ " + fmtK(window) + " " + t("tokens") : t("tokens")));
+      big.append(num("b", "", p.tokens), el("span", "", window ? "/ " + fmtK(window) + " " + t("tokens") : t("tokens")));
       const sub = el("div", "ctx-sub");
       if (window) {
         const bits = [t("{pct} full", { pct: pct(full) })];
@@ -824,12 +822,19 @@
 
       const cache = cacheOf(r) || opts.cache;
       // another agent or session drawn in the card has no last request's
-      // cache to show: its place stays, with a dash till it is read
-      const whose = r.agent + " " + (opts.series?.[0]?.id ?? "");
+      // cache to show: its place stays, with a dash till it is read. The
+      // session is the caller's key for it (opts.session), not its line's
+      // first request: Routing keeps the latest 60 requests, so in a long
+      // session that first one moved on with each new request, and every
+      // request under way showed "—" (shenggxhz on X, Codex in T3 Code)
+      const whose = r.agent + " " + opts.session;
       if (whose !== cacheWhose) lastCache = null;
       cacheWhose = whose;
+      // opened while a request is under way, the session's last answered
+      // request is the cache to show till this one's is read
+      lastCache ||= cacheOf(opts.prev);
       const known = cache && p.counted !== false ? cache : null;
-      if (known || cacheShown) {
+      if (known || cacheShown || lastCache) {
         // once shown, the cache keeps its place, so nothing under it moves
         // up and back down. A request under way has read no cache yet:
         // the last request's stays, dimmed and named as the last one's,
@@ -837,10 +842,10 @@
         // request flashed it to "—" and an empty bar, the dash against
         // 命中). Nothing to show is said in words, with no bar
         const shown = known || (live ? lastCache : null);
-        const c = el("div", "ctx-stat ctx-cache" + (!known && shown ? " was" : shown ? "" : " none"));
+        const c = el("div", "ctx-stat ctx-cache" + (known ? "" : shown ? " was" : " none"));
         c.append(el("div", "ctx-k", t("Prompt cache")));
         const cb = el("div", "ctx-big");
-        cb.append(el("b", "", shown ? pct(shown.read / shown.total) : "—"), el("span", "", t("hit")));
+        cb.append(el("b", "", shown ? hitPct(shown.read / shown.total) : "—"), el("span", "", t("hit")));
         const bar = el("div", "ctx-bar");
         const fillBar = el("i");
         fillBar.style.width = (shown ? (shown.read / shown.total) * 100 : 0).toFixed(1) + "%";
@@ -1000,8 +1005,8 @@
     reliable: "Its requests that didn't fail: none at 20% failing",
   };
   const TAGS = {
-    "cache-friendly": ["Cache-friendly", (v) => t("{pct} of its prompts were read from the vendor's cache", { pct: pct(v) })],
-    "cache-misses": ["Cache misses", (v) => t("Only {pct} of its prompts were read from the cache: each request pays for most of its prompt again", { pct: pct(v) })],
+    "cache-friendly": ["Cache-friendly", (v) => t("{pct} of its prompts were read from the vendor's cache", { pct: hitPct(v) })],
+    "cache-misses": ["Cache misses", (v) => t("Only {pct} of its prompts were read from the cache: each request pays for most of its prompt again", { pct: hitPct(v) })],
     lean: ["Lean start", (v) => t("Every request starts with {tokens} of system prompt, tools and memory", { tokens: fmtK(v) })],
     "heavy-start": ["Heavy start", (v) => t("Every request starts with {tokens} of system prompt, tools and memory, before a word of yours", { tokens: fmtK(v) })],
     "mcp-heavy": ["MCP-heavy", (v) => t("MCP servers' tool definitions take {tokens} of every request", { tokens: fmtK(v) })],
@@ -1088,7 +1093,7 @@
     fact("Largest", fmtK(a.p90), "90% of its requests' prompts are this size or smaller");
     fact("Starts with", fmtK(a.baseline), "System prompt, tools and memory: what every request carries before the conversation");
     fact("Grows by", a.growth ? "+" + fmtK(a.growth) : "—", "How much a request's prompt adds to the one before it, the median");
-    fact("Cache hit", a.scores?.find((s) => s.key === "cache") && a.cache ? pct(a.cache) : "—", "Of its prompts, what the vendor read from its cache");
+    fact("Cache hit", a.scores?.find((s) => s.key === "cache") && a.cache ? hitPct(a.cache) : "—", "Of its prompts, what the vendor read from its cache");
     fact("Window size", a.window ? fmtK(a.window) : "—", "The largest context window of the models it used");
 
     const mix = el("div", "ctx-mix");
@@ -1159,6 +1164,8 @@
     return box;
   }
 
+  window.ctxSpark = spark;
+  window.ctxHealth = health;
 
   // ---------- tuned for you: the settings that would have spent the fewest tokens ----------
 
@@ -1361,7 +1368,7 @@
     title.after(note);
     if (set.locked) note.textContent = t("{name} is set and comes first", { name: set.locked });
     else if (own) note.textContent = t("{model} compacts at its own {value}, which comes first", { model: own.model, value: fmtK(own.value) });
-    else if (set.source == "long") note.textContent = t("Long conversations, shared by Codex, Claude Code and Grok Build");
+    else if (set.source == "long") note.textContent = ((prefs || {}).agentCompacts || {})[agent] ? t("Long conversations in {agent}", { agent: agentLabel(agent) }) : t("Long conversations, shared by Codex, Claude Code and Grok Build");
     else if (set.ours) note.textContent = t("Set by magpie");
     else if (set.value && a.compact && +set.value > a.compact.window && a.compact.window) note.textContent = t("You set {value}; the model's {window} comes first", { value: show(set.value), window: fmtK(a.compact.window) });
     else if (set.value) note.textContent = t("You set {value}", { value: show(set.value) });
@@ -1472,6 +1479,8 @@
   }
 
   function renderTune(pane) {
+    // gateway mode: the agents and their files are on other computers
+    if (tuneData?.gateway || !tuneData && gatewayMode) return;
     const head = el("div", "row-head ctx-sess-head");
     head.append(el("span", "label", t("Tuned for you")), el("span", "grow"));
     pane.append(head);
@@ -1501,7 +1510,7 @@
     if (read !== tuneRead) return;
     const json = JSON.stringify(data);
     if (!force && tuneData && json === tuneJSON) return;
-    tuneData = { days: +data.days || +days, agents: objs(data?.agents).map((a) => ({ ...a, advice: objs(a.advice).filter((r) => obj(r.compact) || obj(r.ttl) || r.few).map((r) => ({ ...r, setting: obj(r.setting) ? r.setting : {} })) })) }, tuneJSON = json;
+    tuneData = { days: +data.days || +days, gateway: !!data?.gateway, agents: objs(data?.agents).map((a) => ({ ...a, advice: objs(a.advice).filter((r) => obj(r.compact) || obj(r.ttl) || r.few).map((r) => ({ ...r, setting: obj(r.setting) ? r.setting : {} })) })) }, tuneJSON = json;
     renderContext();
   }
 
