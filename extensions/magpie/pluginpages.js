@@ -83,7 +83,7 @@
     f.setAttribute("referrerpolicy", "no-referrer");
     f.setAttribute("allow", "");
     f.title = titled(p.entry);
-    f.src = framed(p.entry.url);
+    installFrame(f, p.entry.url);
     p.frame = f;
     p.hello = false;
     p.shown = true;
@@ -367,18 +367,32 @@
   // it (the frame sends no Referer), as the server's policy for the frame
   // can't know the address a reverse proxy that keeps no Host serves it
   // at. The desktop window's scheme is the server's own to name.
+  // 在扩展里（file://）把插件页装进帧：那一页是电脑上现场生成的，帧加载不了跨源地址，
+  // 所以让插件把它内部联成一份自包含的 HTML（`/api/dsh-magpie/__pluginpage`），再塞进 srcdoc。
+  // 于是它在扩展自己里面画出来 —— 不经过 App、不开内置浏览器。
+  const NOTICE = '<!doctype html><meta charset="utf-8">'
+    + '<body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;'
+    + 'font:14px/1.6 -apple-system,system-ui,sans-serif;color:#8a8f98;background:transparent;text-align:center">'
+    + '<p style="max-width:22em;padding:0 1.5em">这一页暂时打不开。<br>The plugin page could not be loaded.</p>';
+
+  function installFrame(f, url) {
+    if (/^https?:$/.test(location.protocol)) { f.src = framed(url); return; }
+    const hostFetch = window.__dshHostFetch;
+    if (typeof hostFetch !== "function") { f.srcdoc = NOTICE; return; }
+    hostFetch("dsh-magpie", "/api/dsh-magpie/__pluginpage?url=" + encodeURIComponent(url))
+      .then((res) => (res && res.ok ? res.text() : Promise.reject(new Error("plugin page " + (res && res.status)))))
+      .then((text) => { f.srcdoc = text; })
+      .catch((error) => {
+        f.srcdoc = NOTICE;
+        try { if (window.console && console.error) console.error("[magpie] 插件页装不上", error); } catch { /* 无控制台 */ }
+      });
+  }
+
   function framed(url) {
     if (/^https?:$/.test(location.protocol)) {
       return url + (url.includes("?") ? "&" : "?") + "_o=" + encodeURIComponent(location.origin);
     }
-    // 扩展里这一页是从本地文件打开的（file://）。插件页是电脑上 magpie 现场生成的**站点绝对
-    // 路径**（/_magpie/plugin/<hash>/…）：在这里它变成了一个不存在的本地文件，浏览器只会甩
-    // 一张 ERR_FILE_NOT_FOUND。与其留这张错误页，不如说清它只能在电脑上开（见 SOURCE.md 第 8 条）。
-    const notice = '<!doctype html><meta charset="utf-8">'
-      + '<body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;'
-      + 'font:14px/1.6 -apple-system,system-ui,sans-serif;color:#8a8f98;background:transparent;text-align:center">'
-      + '<p style="max-width:22em;padding:0 1.5em">插件页只能在电脑上打开。<br>Its page is served by magpie on the computer.</p>';
-    return "data:text/html;charset=utf-8," + encodeURIComponent(notice);
+    return url;
   }
 
   // a panel's frame in body, told context once it says hello
@@ -389,7 +403,7 @@
     f.setAttribute("referrerpolicy", "no-referrer");
     f.setAttribute("allow", "");
     f.title = titled(e);
-    f.src = framed(e.url);
+    installFrame(f, e.url);
     const p = { entry: e, frame: f, context, body, hello: false, broken: false };
     p.timer = setTimeout(() => { if (!p.hello) panelBroke(p, t("{name}'s page didn't answer", { name: titled(e) })); }, HELLO_MS);
     panels.set(f, p);
