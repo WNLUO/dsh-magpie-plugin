@@ -52,7 +52,7 @@ export const EXTENSION_ID = 'com.dsh.magpie.extension'
 /** 扩展接口版本：只在「App 给扩展的东西变了」时抬（与 App RUNTIME_VERSION 无关）。 */
 export const EXTENSION_API_VERSION = '1'
 /** 扩展自己的版本号，不跟插件版本走：只有扩展包内容变了才抬。 */
-const EXTENSION_VERSION = '1.0.6'
+const EXTENSION_VERSION = '1.0.7'
 
 /**
  * 这个扩展声明要哪几项能力。
@@ -193,17 +193,32 @@ function rewriteShimScript() {
   };
   // 页面里的报错静默上报。手机上只剩 App 的一句提示，没有栈、没有位置，作者那边就永远查不到；
   // 走宿主的取数通道送到插件那条旁路，落一行到电脑上的文件里。全程不进界面。
-  function sendDiag(entry) {
-    try {
-      if (!bridgeReady()) return;
-      window.__dshHostFetch(${JSON.stringify(HOST_DATA.service)}, prefix + '/__diag', {
-        method: 'POST',
-        body: JSON.stringify(entry),
-        contentType: 'application/json',
-      }).catch(function () {});
-    } catch (e) {
-      /* 上报失败不该变成页面的另一个错误 */
+  // 排队再发：页面里的错多半在加载期就抛了，那时宿主的取数通道还没装好 —— 早先几版就是
+  // 在这儿把最有用的一条丢了。所以先存着，等桥一到再一起发出去。
+  var diagQueue = [];
+  var diagTries = 0;
+  function flushDiag() {
+    if (!bridgeReady() || !window.__dshHostFetch) {
+      if (diagTries < 40 && diagQueue.length) { diagTries += 1; setTimeout(flushDiag, 250); }
+      return;
     }
+    while (diagQueue.length) {
+      try {
+        window.__dshHostFetch(${JSON.stringify(HOST_DATA.service)}, prefix + '/__diag', {
+          method: 'POST',
+          body: JSON.stringify(diagQueue.shift()),
+          contentType: 'application/json',
+        }).catch(function () {});
+      } catch (e) {
+        /* 上报失败不该变成页面的另一个错误 */
+        return;
+      }
+    }
+  }
+  function sendDiag(entry) {
+    diagQueue.push(entry);
+    if (diagQueue.length > 30) diagQueue.shift();
+    flushDiag();
   }
   window.addEventListener('error', function (event) {
     var err = event && event.error;

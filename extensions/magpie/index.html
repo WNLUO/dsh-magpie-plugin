@@ -77,17 +77,32 @@
   };
   // 页面里的报错静默上报。手机上只剩 App 的一句提示，没有栈、没有位置，作者那边就永远查不到；
   // 走宿主的取数通道送到插件那条旁路，落一行到电脑上的文件里。全程不进界面。
-  function sendDiag(entry) {
-    try {
-      if (!bridgeReady()) return;
-      window.__dshHostFetch("dsh-magpie", prefix + '/__diag', {
-        method: 'POST',
-        body: JSON.stringify(entry),
-        contentType: 'application/json',
-      }).catch(function () {});
-    } catch (e) {
-      /* 上报失败不该变成页面的另一个错误 */
+  // 排队再发：页面里的错多半在加载期就抛了，那时宿主的取数通道还没装好 —— 早先几版就是
+  // 在这儿把最有用的一条丢了。所以先存着，等桥一到再一起发出去。
+  var diagQueue = [];
+  var diagTries = 0;
+  function flushDiag() {
+    if (!bridgeReady() || !window.__dshHostFetch) {
+      if (diagTries < 40 && diagQueue.length) { diagTries += 1; setTimeout(flushDiag, 250); }
+      return;
     }
+    while (diagQueue.length) {
+      try {
+        window.__dshHostFetch("dsh-magpie", prefix + '/__diag', {
+          method: 'POST',
+          body: JSON.stringify(diagQueue.shift()),
+          contentType: 'application/json',
+        }).catch(function () {});
+      } catch (e) {
+        /* 上报失败不该变成页面的另一个错误 */
+        return;
+      }
+    }
+  }
+  function sendDiag(entry) {
+    diagQueue.push(entry);
+    if (diagQueue.length > 30) diagQueue.shift();
+    flushDiag();
   }
   window.addEventListener('error', function (event) {
     var err = event && event.error;
