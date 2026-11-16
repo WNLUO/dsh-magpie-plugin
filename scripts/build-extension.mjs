@@ -52,7 +52,7 @@ export const EXTENSION_ID = 'com.dsh.magpie.extension'
 /** 扩展接口版本：只在「App 给扩展的东西变了」时抬（与 App RUNTIME_VERSION 无关）。 */
 export const EXTENSION_API_VERSION = '1'
 /** 扩展自己的版本号，不跟插件版本走：只有扩展包内容变了才抬。 */
-const EXTENSION_VERSION = '1.2.0'
+const EXTENSION_VERSION = '1.2.1'
 
 /**
  * 这个扩展声明要哪几项能力。

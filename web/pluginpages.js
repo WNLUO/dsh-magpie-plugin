@@ -367,21 +367,97 @@
   // it (the frame sends no Referer), as the server's policy for the frame
   // can't know the address a reverse proxy that keeps no Host serves it
   // at. The desktop window's scheme is the server's own to name.
-  // 在扩展里（file://）把插件页装进帧：那一页是电脑上现场生成的，帧加载不了跨源地址，
-  // 所以让插件把它内部联成一份自包含的 HTML（`/api/dsh-magpie/__pluginpage`），再塞进 srcdoc。
-  // 于是它在扩展自己里面画出来 —— 不经过 App、不开内置浏览器。
+  // 在扩展里（file://）把插件页装进帧。
+  //
+  // 那一页是电脑上现场生成的，帧加载不了跨源地址；但页面自己取得到它（走宿主的取数通道，与
+  // 所有取数同一条）。所以：**取下来、把它引用的 js / css / 图片一起内联**，再把这份自包含的
+  // HTML 塞进帧的 srcdoc。全程在扩展自己里面 —— 不经过 App、不开内置浏览器、不要令牌。
+  const HOST_SERVICE = "dsh-magpie";
+  const MAX_INLINE_REFS = 40;
   const NOTICE = '<!doctype html><meta charset="utf-8">'
     + '<body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;'
     + 'font:14px/1.6 -apple-system,system-ui,sans-serif;color:#8a8f98;background:transparent;text-align:center">'
     + '<p style="max-width:22em;padding:0 1.5em">这一页暂时打不开。<br>The plugin page could not be loaded.</p>';
 
+  function pagePathOf(url) {
+    if (url.startsWith("/")) return url;
+    const base = location.href.split("?")[0].split("#")[0];
+    return new URL(url, base).pathname;
+  }
+
+  function resolveRefOf(ref, fromPath) {
+    if (!ref) return null;
+    if (/^(?:data:|blob:|#|mailto:|javascript:|about:)/i.test(ref)) return null;
+    if (/^(?:https?:)?\/\//i.test(ref)) return null;
+    if (ref.startsWith("/")) return ref;
+    const dir = fromPath.slice(0, fromPath.lastIndexOf("/") + 1);
+    return new URL(ref, "http://x" + dir).pathname;
+  }
+
+  function base64Of(bytes) {
+    let text = "";
+    for (let i = 0; i < bytes.length; i += 1) text += String.fromCharCode(bytes[i]);
+    return btoa(text);
+  }
+
+  async function inlinePluginPage(raw, fromPath) {
+    const hostFetch = window.__dshHostFetch;
+    const doc = new DOMParser().parseFromString(raw, "text/html");
+    const fetched = new Map();
+    const bytesOf = (pathName) => {
+      if (!fetched.has(pathName)) {
+        fetched.set(pathName, hostFetch(HOST_SERVICE, pathName)
+          .then((res) => (res && res.ok ? res.arrayBuffer() : null))
+          .then((buf) => (buf ? new Uint8Array(buf) : null))
+          .catch(() => null));
+      }
+      return fetched.get(pathName);
+    };
+
+    const scripts = [...doc.querySelectorAll("script[src]")].slice(0, MAX_INLINE_REFS);
+    const styles = [...doc.querySelectorAll('link[rel="stylesheet"][href]')].slice(0, MAX_INLINE_REFS);
+    const images = [...doc.querySelectorAll("img[src]")].slice(0, MAX_INLINE_REFS);
+
+    await Promise.all([
+      ...scripts.map(async (el) => {
+        const pathName = resolveRefOf(el.getAttribute("src"), fromPath);
+        if (!pathName) return;
+        const bytes = await bytesOf(pathName);
+        if (!bytes) return; // 上游自己缺这一份：少一样东西，不该让整页打不开
+        const fresh = doc.createElement("script");
+        fresh.textContent = new TextDecoder().decode(bytes).replace(/<\/script>/gi, "<\\/script>");
+        el.replaceWith(fresh);
+      }),
+      ...styles.map(async (el) => {
+        const pathName = resolveRefOf(el.getAttribute("href"), fromPath);
+        if (!pathName) return;
+        const bytes = await bytesOf(pathName);
+        if (!bytes) return;
+        const fresh = doc.createElement("style");
+        fresh.textContent = new TextDecoder().decode(bytes);
+        el.replaceWith(fresh);
+      }),
+      ...images.map(async (el) => {
+        const pathName = resolveRefOf(el.getAttribute("src"), fromPath);
+        if (!pathName) return;
+        const bytes = await bytesOf(pathName);
+        if (!bytes) return;
+        el.setAttribute("src", "data:image/png;base64," + base64Of(bytes));
+      }),
+    ]);
+
+    return "<!doctype html>" + doc.documentElement.outerHTML;
+  }
+
   function installFrame(f, url) {
     if (/^https?:$/.test(location.protocol)) { f.src = framed(url); return; }
     const hostFetch = window.__dshHostFetch;
     if (typeof hostFetch !== "function") { f.srcdoc = NOTICE; return; }
-    hostFetch("dsh-magpie", "/api/dsh-magpie/__pluginpage?url=" + encodeURIComponent(url))
+    const fromPath = pagePathOf(url);
+    hostFetch(HOST_SERVICE, fromPath)
       .then((res) => (res && res.ok ? res.text() : Promise.reject(new Error("plugin page " + (res && res.status)))))
-      .then((text) => { f.srcdoc = text; })
+      .then((raw) => inlinePluginPage(raw, fromPath))
+      .then((html) => { f.srcdoc = html; })
       .catch((error) => {
         f.srcdoc = NOTICE;
         try { if (window.console && console.error) console.error("[magpie] 插件页装不上", error); } catch { /* 无控制台 */ }
