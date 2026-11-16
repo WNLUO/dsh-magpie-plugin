@@ -312,3 +312,35 @@ test('页面自己上报给 App 的错，顺手抄一份到旁路并补上栈', 
   fakeWindow.ReactNativeWebView.postMessage(JSON.stringify({ kind: 'ready' }))
   assert.equal(sent.length, 1)
 })
+
+test('页面内核记的那一行 console.error 也抄一份，带插件名与栈', () => {
+  // 页面里的小部件抛错是它自己的内核 catch 住的：一行 console.error 带插件 id、部件、钩子名和
+  // 错误对象 —— 手机上这行看不到，可它最有信息。抄一份过来，栈就有了。
+  const html = read(declared, 'magpie', 'index.html')
+  const injected = html.match(/<script>([\s\S]*?)<\/script>/)
+  assert.ok(injected)
+  const sent = []
+  const printed = []
+  const fakeWindow = {
+    __DSH_EXTENSION__: { capabilities: ['content.read', 'host.data'] },
+    __dshHostFetch: (service, url, opts) => {
+      sent.push(JSON.parse(opts.body))
+      return Promise.resolve({ ok: true, status: 200 })
+    },
+    console: { error: (...args) => printed.push(args) },
+    addEventListener() {},
+    fetch: () => Promise.resolve({ ok: true, status: 200 }),
+  }
+  new Function('window', 'Response', 'document', injected[1])(fakeWindow, globalThis.Response, {
+    documentElement: { setAttribute() {} },
+  })
+
+  const boom = new Error("Cannot read properties of null (reading 'length')")
+  boom.stack = 'TypeError: x\n    at renderQuotas (plugins/usage/page.js:1200:9)'
+  fakeWindow.console.error('[magpie] usage: page.mount', boom)
+  assert.equal(printed.length, 1, '原来那行必须照旧打出去')
+  assert.equal(sent.length, 1, '要抄一份到旁路')
+  assert.equal(sent[0].kind, 'console')
+  assert.match(sent[0].message, /usage: page\.mount/, '插件与部件名要在消息里')
+  assert.match(sent[0].stack, /renderQuotas/, '错误对象的栈必须带上')
+})

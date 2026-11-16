@@ -130,6 +130,32 @@
       return nativePost(raw);
     };
   }
+  // 页面里的小部件抛错时，是它自己的内核 catch 住的：记一行 console.error（带插件 id、部件、
+  // 钩子名和错误对象），再把坏掉的那一页换掉。手机上那行日志看不到，可它恰好是最有信息的一条。
+  // 所以 console.error 也抄一份到旁路，带栈。
+  if (window.console && typeof window.console.error === 'function') {
+    var nativeConsoleError = window.console.error.bind(window.console);
+    window.console.error = function () {
+      try {
+        var args = Array.prototype.slice.call(arguments);
+        var parts = [];
+        var stack = '';
+        for (var i = 0; i < args.length; i += 1) {
+          var a = args[i];
+          if (a && typeof a.stack === 'string') {
+            stack = String(a.stack);
+            parts.push(String(a.message || a));
+          } else {
+            parts.push(typeof a === 'string' ? a : JSON.stringify(a));
+          }
+        }
+        sendDiag({ kind: 'console', message: parts.join(' ').slice(0, 1200), stack: stack });
+      } catch (e) {
+        /* 抄不下来就照原样打 */
+      }
+      return nativeConsoleError.apply(window.console, arguments);
+    };
+  }
   window.fetch = wrapped;
 })();
 </script>

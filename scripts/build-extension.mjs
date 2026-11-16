@@ -52,7 +52,7 @@ export const EXTENSION_ID = 'com.dsh.magpie.extension'
 /** 扩展接口版本：只在「App 给扩展的东西变了」时抬（与 App RUNTIME_VERSION 无关）。 */
 export const EXTENSION_API_VERSION = '1'
 /** 扩展自己的版本号，不跟插件版本走：只有扩展包内容变了才抬。 */
-const EXTENSION_VERSION = '1.0.5'
+const EXTENSION_VERSION = '1.0.6'
 
 /**
  * 这个扩展声明要哪几项能力。
@@ -244,6 +244,32 @@ function rewriteShimScript() {
         /* 解析不出来就原样放行 */
       }
       return nativePost(raw);
+    };
+  }
+  // 页面里的小部件抛错时，是它自己的内核 catch 住的：记一行 console.error（带插件 id、部件、
+  // 钩子名和错误对象），再把坏掉的那一页换掉。手机上那行日志看不到，可它恰好是最有信息的一条。
+  // 所以 console.error 也抄一份到旁路，带栈。
+  if (window.console && typeof window.console.error === 'function') {
+    var nativeConsoleError = window.console.error.bind(window.console);
+    window.console.error = function () {
+      try {
+        var args = Array.prototype.slice.call(arguments);
+        var parts = [];
+        var stack = '';
+        for (var i = 0; i < args.length; i += 1) {
+          var a = args[i];
+          if (a && typeof a.stack === 'string') {
+            stack = String(a.stack);
+            parts.push(String(a.message || a));
+          } else {
+            parts.push(typeof a === 'string' ? a : JSON.stringify(a));
+          }
+        }
+        sendDiag({ kind: 'console', message: parts.join(' ').slice(0, 1200), stack: stack });
+      } catch (e) {
+        /* 抄不下来就照原样打 */
+      }
+      return nativeConsoleError.apply(window.console, arguments);
     };
   }
   window.fetch = wrapped;
