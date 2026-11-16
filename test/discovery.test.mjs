@@ -6,7 +6,7 @@
  *
  * 判据全部来自移动端插件真实实现（`dsh-mobile-plugin/lib/mobile/third-party-extensions.js`
  * 的 `discoverPackages` / `discoverDataServices`）：直接调它，不照着它的规则重写一份。
- * 找不到那个模块时（本仓单独检出、没 DSH-mobile 在旁边）跳过并说明，不假装验过。
+ * 找不到那个模块时（本仓单独检出、手上没有 DSH-mobile）跳过并说明，不假装验过。
  *
  * 运行：node --test test/
  */
@@ -20,8 +20,15 @@ import { createRequire } from 'node:module'
 
 const ROOT = path.join(import.meta.dirname, '..')
 
-/** 移动端插件那份实现：与本仓同级 checkout 时才在。 */
-const DISCOVER = path.join(ROOT, '..', 'DSH-mobile', 'dsh-mobile-plugin', 'lib', 'mobile', 'third-party-extensions.js')
+/**
+ * 移动端插件那份实现。两种布局都认，顺序就是「先看本仓住在 DSH-mobile 里（主仓布局），
+ * 再看与本仓同级 checkout 的 DSH-mobile（独立检出的老布局）」。都没有才跳过。
+ */
+const DISCOVER_CANDIDATES = [
+  path.join(ROOT, '..', 'dsh-mobile-plugin', 'lib', 'mobile', 'third-party-extensions.js'),
+  path.join(ROOT, '..', 'DSH-mobile', 'dsh-mobile-plugin', 'lib', 'mobile', 'third-party-extensions.js'),
+]
+const DISCOVER = DISCOVER_CANDIDATES.find((file) => fs.existsSync(file)) ?? DISCOVER_CANDIDATES[0]
 const available = fs.existsSync(DISCOVER)
 
 /**

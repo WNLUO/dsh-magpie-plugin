@@ -63,7 +63,7 @@ node scripts/update-check.mjs --install  # 核对版本后真的装
 
 ```sh
 node scripts/build-extension.mjs   # web/ → extensions/magpie/
-node scripts/dev-install.mjs       # 另拷一份到 $DSH_HOME/extension-dev/magpie/
+node scripts/dev-install.mjs       # 另拷一份到 $DSH_HOME/extension-dev/dsh-magpie-plugin.magpie/
 ```
 
 然后在手机上：设置 → 扩展 → **开发者模式**（打开）。之后不用再管手机 —— 电脑上那个目录里
@@ -71,8 +71,13 @@ node scripts/dev-install.mjs       # 另拷一份到 $DSH_HOME/extension-dev/mag
 重开。扩展页末尾那段「本地开发」只是一张状态表，没有「导入」这类按钮。也可以
 `node scripts/dev-watch.mjs` 一条命令盯着改。
 
+那个目录名不是随便起的：**它就是扩展的 slug，也就是「插件名.扩展目录名」**。同 slug 才算
+同一个扩展 —— 手机上只留一份、右栏只有一个入口，打开就是你本地这份；开着开发者模式时
+「已安装」「可安装」两段都不再列它，只在本地开发那一段出现。写成裸 `magpie` 就会变成两份
+互不相干的包，右栏多出一个入口，而且本地那份永远顶不掉已装的正式版。
+
 想在手机上看页面本身的热更新（不必每次重装重开），就把 `web/serve.mjs` 跑起来，然后把
-**电脑上那份拷贝**（`~/.dsh/extension-dev/magpie/manifest.json`，不是仓库里这份）的
+**电脑上那份拷贝**（`~/.dsh/extension-dev/dsh-magpie-plugin.magpie/manifest.json`，不是仓库里这份）的
 `devServer` 写成你的局域网地址（只认私网 / 回环 + http），手机那一页就直接加载它。
 
 那格一定要写在拷贝里：写进仓库这份会跟着包发给用户，等于把一个局域网地址打进产物。反过来，

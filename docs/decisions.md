@@ -53,6 +53,11 @@ magpie 的响应。4xx/5xx 也照原样透传，让页面按普通 Response 判�
 老版本 App 的 magpie 走的还是移动端插件那条老路，删了老用户当场打不开。所以新插件先铺、
 几版之后再清移动端插件里那份。
 
+**2026-11-12 追记：这一条没有照做。** `extensions/magpie/`、`lib/mobile/magpie-web.js`、
+`extension-data.js` 的静态 `SERVICES.magpie`，连同 `/api/mobile/v1/magpie/web` 这条路由，
+一起在 `feat: implement Edge Rail settings page…` 那次提交里删掉了 —— 早于「新插件铺开几版」
+这个前提，而新插件至今没发 npm。后果如实记着：老版本 App 上 magpie 的入口与取数一起失效。
+
 ## 装进 profile 之后必须自己登记启动项
 
 `pnpm install` 只做两件事：把包装进 `node_modules`、把依赖写进 `dependencies`。它**不会**

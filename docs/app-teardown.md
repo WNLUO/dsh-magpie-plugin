@@ -52,14 +52,16 @@
 - `test-page-layers.js` 里有一条「旧那条 magpie 整页浮层不许长回来」，删 magpie 之后这条仍该保留（它钉的是历史教训），只把注释里 magpie 的说法改掉。
 - `test-extension-data.js` 里 magpie 是「内置服务」的例子，改成别的内置服务或改成纯描述。
 
-## 四、移动端插件那边（过渡期先不动）
+## 四、移动端插件那边（2026-11-12 已删，比这里的计划早）
 
-`dsh-mobile-plugin/extensions/magpie/`、`dsh-mobile-plugin/extensions/magpie.zip`、
-`dsh-mobile-plugin/extensions/catalog.json` 里那条、`lib/mobile/magpie-web.js`、
-`lib/mobile/extension-data.js` 里 `SERVICES.magpie`。
+`dsh-mobile-plugin/extensions/magpie/`、`lib/mobile/magpie-web.js`、`extension-data.js` 里
+`SERVICES.magpie` 那一条，连同 `/api/mobile/v1/magpie/web` 这条路由，都已经不在仓库里了
+（权限表里最后留着的那行声明也一并清掉——路由没了，它就是死配置）。
 
-**这几样要留着**：老版本 App 装的是移动端插件，走 `/api/mobile/v1/magpie/web` 与
-`extension/data` 那条老路；删了老用户当场打不开。等新插件+新 App 铺开几版再一起清。
+这一节原本写的是「先留着」：老版本 App 装的是移动端插件、走 `/api/mobile/v1/magpie/web`
+与 `extension/data` 那条老路，删了老用户当场打不开。实际删除发生在 2026-11-12，早于「新插件
+真机验过」「发 npm 铺开几版」这两个前提。**后果就是这个：老版本 App 上 magpie 已经没有可用
+路径**，而新插件那边只到「本机已装、宿主侧端到端验过」。
 
 ## 五、顺序
 
@@ -67,6 +69,10 @@
 2. 发 npm、铺开几版。
 3. 按上面一到三拆 App 侧，跑守卫。
 4. 再等一版，最后清移动端插件那份。
+
+**实际顺序不是这样**：第 3 步（App 侧）与第 4 步（移动端插件那份）在 2026-11-12 一次做完了，
+而第 1、2 步到写这段话时仍没过。这两步的前提是「新路径已经在用户手上能用」，不是「新路径
+在开发者本机能用」—— 留着当教训。
 
 ## 六、拆完要验的
 

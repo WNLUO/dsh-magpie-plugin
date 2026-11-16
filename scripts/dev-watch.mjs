@@ -6,8 +6,8 @@
  *
  * 手机上的这一页是从本地文件加载的（`file://`），它够不到电脑上的 dev server —— 跨源，
  * 而且扩展沙箱只放开自己那个版本目录。所以「改完立刻看到」只能靠：电脑上把新产物写进
- * `$DSH_HOME/extension-dev/magpie/`，手机那一页发现内容变了就自己重装、自己刷新
- * （手机侧的判据在 App 的 `services/extensions/dev-watch.ts`）。
+ * `$DSH_HOME/extension-dev/dsh-magpie-plugin.magpie/`，手机那一页发现内容变了就自己重装、
+ * 自己刷新（手机侧的判据在 App 的 `services/extensions/dev-watch.ts`）。
  *
  * magpie 这份页面还是上游快照、没有 vite 开发服务器，所以清单里那格 `devServer` 不写
  * ——那格是给「页面源码带 HMR」的扩展直连用的，写一个连不上的地址只会让手机白等一次超时。
@@ -34,7 +34,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const WEB = path.join(ROOT, 'web')
 const SOURCE = path.join(ROOT, 'extensions', 'magpie')
 const BUILD = path.join(ROOT, 'scripts', 'build-extension.mjs')
-const SLUG = 'magpie'
+const SLUG = 'dsh-magpie-plugin.magpie'
+// 用完整 slug（`插件名.扩展目录名`）：同 slug 才算同一个扩展，本地这份才顶得掉已装的正式版。
+// 理由与那条规矩写在 `dev-install.mjs` 同一个位置。
 const ONCE = process.argv.includes('--once')
 
 /**
