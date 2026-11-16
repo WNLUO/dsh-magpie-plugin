@@ -7,8 +7,11 @@
 // （裸的 /api/* 会和 DSH 宿主自己的撞车）。App 那一侧的 hostData 通道按清单里的 match 前缀
 // 认请求、不改写路径，所以这里先把 /api/ 挪到前缀下；宿主那一侧再把前缀剥掉转给 magpie。
 // 只包 window.fetch，只动本源绝对路径，其余原样放行。
+//
+// 另外把「请 magpie 复制」那一发挡掉：它写的是电脑的剪贴板，手机上用户要的是这台手机的。
 (function () {
   var prefix = "/api/dsh-magpie";
+  var copyPath = "/api/dsh-magpie/api/copy";
   var original = window.fetch;
   if (typeof original !== 'function') return;
   function isApiPath(p) {
@@ -23,6 +26,7 @@
   window.fetch = function (input, init) {
     if (typeof input === 'string') {
       var next = moved(input);
+      if (next === copyPath) return Promise.resolve(new Response('', { status: 501 }));
       return next === input ? original.call(this, input, init) : original.call(this, next, init);
     }
     return original.call(this, input, init);

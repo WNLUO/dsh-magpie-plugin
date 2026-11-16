@@ -155,3 +155,34 @@ test('整包 zip 在扩展根上（与 slug 目录平级），且装的就是目
     assert.ok(inZip.has(rel), `产物里的 ${rel} 没进整包（手机上会缺这个文件）`)
   }
 })
+
+test('「复制」那一发不出页面：请电脑复制被挡成失败，正常取数照旧挪前缀', async () => {
+  // 页面的「复制」第一步是 `POST /api/copy`，请 magpie 把文本放进**电脑**的剪贴板。手机上这一发
+  // 成了也没用：文本进的是电脑的剪贴板，用户在自己手机上粘不出来。产包时在注入的改写里把它挡成
+  // 失败响应，页面就会按它自己的顺序走手机剪贴板。
+  //
+  // 这里真跑那段注入脚本（不是看源码里有没有一句话）：喂一个假 window 与假 Response，断言三个
+  // 方向 —— 复制那一发不发出去、正常取数照旧挪到前缀下、外链原样放行。
+  const html = read(declared, 'magpie', 'index.html')
+  const injected = html.match(/<script>([\s\S]*?)<\/script>/)
+  assert.ok(injected, 'index.html 里找不到注入的改写脚本')
+  const calls = []
+  const fakeWindow = {
+    fetch: (input) => {
+      calls.push(typeof input === 'string' ? input : String(input))
+      return Promise.resolve({ ok: true, status: 200 })
+    },
+  }
+  new Function('window', 'Response', injected[1])(fakeWindow, globalThis.Response)
+  const pageFetch = fakeWindow.fetch
+
+  const copied = await pageFetch('/api/copy', { method: 'POST' })
+  assert.equal(copied.ok, false, '复制那一发必须回一个失败响应，页面才会走自己的剪贴板')
+  assert.deepEqual(calls, [], `复制那一发被发出去了：${calls.join(', ')}`)
+
+  await pageFetch('/api/state')
+  assert.deepEqual(calls, ['/api/dsh-magpie/api/state'], '正常取数必须挪到插件前缀下')
+
+  await pageFetch('https://example.com/x.json')
+  assert.equal(calls[1], 'https://example.com/x.json', '外链必须原样放行')
+})

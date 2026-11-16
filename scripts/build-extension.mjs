@@ -8,8 +8,9 @@
  * 页面从手机本地 `file://` 加载，数据请求走「扩展页 → App → 宿主 → magpie」这条通用通道
  * （能力 `host.data`）。
  *
- * 这个脚本只做三件事，页面逻辑一律不动：整份拷贝、把 magpie 自己的 PWA `manifest.json`
- * 与扩展字段合并成一份、在 `index.html` 最前面注入一段路径改写（见下）。
+ * 这个脚本只做四件事，页面逻辑一律不动：整份拷贝、把 magpie 自己的 PWA `manifest.json`
+ * 与扩展字段合并成一份、在 `index.html` 最前面注入一段路径改写（见下），以及同一段里把
+ * 「请 magpie 复制」那条请求挡掉（见「为什么挡掉 /api/copy」）。
  *
  * ## 为什么要注入 `/api/` → `/api/dsh-magpie/api/` 的改写
  *
@@ -51,7 +52,7 @@ export const EXTENSION_ID = 'com.dsh.magpie.extension'
 /** 扩展接口版本：只在「App 给扩展的东西变了」时抬（与 App RUNTIME_VERSION 无关）。 */
 export const EXTENSION_API_VERSION = '1'
 /** 扩展自己的版本号，不跟插件版本走：只有扩展包内容变了才抬。 */
-const EXTENSION_VERSION = '1.0.0'
+const EXTENSION_VERSION = '1.0.1'
 
 /**
  * 这个扩展声明要哪几项能力。
@@ -99,14 +100,34 @@ const DEV_ONLY = new Set(['serve.mjs', 'SOURCE.md', '_probe2.html', '_probe3.htm
  */
 const API_PREFIX = '/api/dsh-magpie'
 
+/**
+ * 为什么挡掉 `/api/copy`。
+ *
+ * 页面的「复制」（网关的 base URL / key / 模型号那几段）第一步是 `POST /api/copy`，请 magpie
+ * 把文本放进**运行 magpie 那台电脑**的剪贴板 —— 上游就是这么写的（注释里写着「App 窗口里
+ * 页面自己的剪贴板 API 会被拒」），对着的是「在电脑上用网页版」那一档。手机上这条能成，于是
+ * 页面报「已复制」，而文本进了 Mac 的剪贴板，用户在自己手机上粘不出来。
+ *
+ * 所以这一发在扩展包里直接回一个失败响应（不发出去），页面就会按它自己的顺序往下走：
+ * `navigator.clipboard` → 复制命令 → 都不行就把文本显示出来让人手动选。三档都是**手机上**
+ * 的剪贴板，这才是用户按那颗按钮时要的东西。
+ *
+ * 只挡这一个路径、只在产物里挡：`web/` 源码与 `serve.mjs` 那条开发路照旧，电脑浏览器里复制
+ * 到本机剪贴板本来就是对的。
+ */
+const COPY_PATH = `${API_PREFIX}/api/copy`
+
 function rewriteShimScript() {
   return `<script>
 // 页面自己的取数都是裸路径（/api/state 这类），而这个插件把接口挂在 ${API_PREFIX} 下
 // （裸的 /api/* 会和 DSH 宿主自己的撞车）。App 那一侧的 hostData 通道按清单里的 match 前缀
 // 认请求、不改写路径，所以这里先把 /api/ 挪到前缀下；宿主那一侧再把前缀剥掉转给 magpie。
 // 只包 window.fetch，只动本源绝对路径，其余原样放行。
+//
+// 另外把「请 magpie 复制」那一发挡掉：它写的是电脑的剪贴板，手机上用户要的是这台手机的。
 (function () {
   var prefix = ${JSON.stringify(API_PREFIX)};
+  var copyPath = ${JSON.stringify(COPY_PATH)};
   var original = window.fetch;
   if (typeof original !== 'function') return;
   function isApiPath(p) {
@@ -121,6 +142,7 @@ function rewriteShimScript() {
   window.fetch = function (input, init) {
     if (typeof input === 'string') {
       var next = moved(input);
+      if (next === copyPath) return Promise.resolve(new Response('', { status: 501 }));
       return next === input ? original.call(this, input, init) : original.call(this, next, init);
     }
     return original.call(this, input, init);
