@@ -50,7 +50,16 @@ export function apply(ctx) {
       const server = scoped.webServer
       scoped.effect(() => {
         try {
-          return server.register({ kind: 'prefix', path: ROUTE_PREFIX, handler: app.handler })
+          // **宿主的 webServer 按 `(req, res)` 两个参数调 handler**（`dsh-devmap` 那些
+          // 真在跑的插件都是这么写的），而这一页内部那条链路是 `(ctx, req, res)` 的形状
+          // （`lib/routes.js` 与它下面的取数 / 转发行都收 ctx，便于测试注入）。所以这里做一层
+          // 适配，别把 `app.handler` 直接挂上去。
+          //
+          // 直接挂的后果很安静：宿主把 `res` 塞在第二位，内部以为那是 `req`、`res` 变成
+          // `undefined`，每个请求都在 `res.writeHead` 上抛 —— 宿主回一个**空正文的 400**，
+          // 日志里一个字的线索都没有。2026-11-17 在真机上就是这么栽的（手机每一条取数都是 400）。
+          const handler = (req, res) => app.handler(undefined, req, res)
+          return server.register({ kind: 'prefix', path: ROUTE_PREFIX, handler })
         } catch (error) {
           log('error', `[dsh-magpie] 路由注册失败（${describeError(error)}）`)
           return undefined

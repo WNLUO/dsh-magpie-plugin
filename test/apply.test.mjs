@@ -154,3 +154,27 @@ test('装载后 handler 真的能穿：注册的那条 handler 走完整链路�
     magpie.close(); hostServer.close()
   }
 })
+
+test('注册的 handler 按宿主的 (req, res) 被调用：未知子路径回 404，不是抛', async () => {
+  // 宿主的 `webServer` 是**两个参数**调的（`(req, res)`，`dsh-devmap` 那些真在跑的插件都这么写）。
+  // 入口要是把内部那条 `(ctx, req, res)` 的 handler 直接挂上去，宿主塞在第二位的 res 会被当成
+  // req、真正的 res 变成 undefined —— 每个请求都在 `res.writeHead` 上抛，宿主回一个**空正文的
+  // 400**，日志里一点线索都没有。2026-11-17 就是这么栽的：手机上每一条取数都是 400。
+  //
+  // 这条守卫只走 `apply` 那一条真路：拿注册上去的那个函数，按宿主的形状调一次。
+  const host = fakeHost()
+  apply(host.ctx)
+  const server = fakeWebServer()
+  host.publishWebServer(server)
+  assert.equal(server.registrations.length, 1, '发布 webServer 后应当注册一条路由')
+
+  const handler = server.registrations[0].handler
+  const written = { status: 0, body: '' }
+  const res = {
+    writeHead(status) { written.status = status },
+    end(body) { written.body = String(body ?? '') },
+  }
+  await handler({ url: `${ROUTE_PREFIX}/nope`, method: 'GET' }, res)
+  assert.equal(written.status, 404, `未知子路径应当回 404，实际 ${written.status}（空正文 400 就是签名错了）`)
+  assert.match(written.body, /not-found/)
+})
