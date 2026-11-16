@@ -373,6 +373,9 @@
   // 所有取数同一条）。所以：**取下来、把它引用的 js / css / 图片一起内联**，再把这份自包含的
   // HTML 塞进帧的 srcdoc。全程在扩展自己里面 —— 不经过 App、不开内置浏览器、不要令牌。
   const HOST_SERVICE = "dsh-magpie";
+  // 取数通道认的是「服务的路径前缀 + 真实路径」：插件页那几个路径得挂在插件自己那条前缀下面，
+  // 少了前缀会被按「这个服务不开放该路径」挡回来（真机上就是这么挡的）。
+  const HOST_PREFIX = "/api/dsh-magpie";
   const MAX_INLINE_REFS = 40;
   const NOTICE = '<!doctype html><meta charset="utf-8">'
     + '<body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;'
@@ -406,7 +409,7 @@
     const fetched = new Map();
     const bytesOf = (pathName) => {
       if (!fetched.has(pathName)) {
-        fetched.set(pathName, hostFetch(HOST_SERVICE, pathName)
+        fetched.set(pathName, hostFetch(HOST_SERVICE, HOST_PREFIX + pathName)
           .then((res) => (res && res.ok ? res.arrayBuffer() : null))
           .then((buf) => (buf ? new Uint8Array(buf) : null))
           .catch(() => null));
@@ -454,8 +457,10 @@
     const hostFetch = window.__dshHostFetch;
     if (typeof hostFetch !== "function") { f.srcdoc = NOTICE; return; }
     const fromPath = pagePathOf(url);
-    hostFetch(HOST_SERVICE, fromPath)
+    hostFetch(HOST_SERVICE, HOST_PREFIX + fromPath)
       .then((res) => (res && res.ok ? res.text() : Promise.reject(new Error("plugin page " + (res && res.status)))))
+      // 取回来的可能是一份失败信封（正文是 {"code":…}）：那不是网页，别塞进帧里给人看原始 JSON。
+      .then((raw) => (/^\s*\{/.test(raw) ? Promise.reject(new Error("plugin page: 不是网页，是失败回执 " + raw.slice(0, 120))) : raw))
       .then((raw) => inlinePluginPage(raw, fromPath))
       .then((html) => { f.srcdoc = html; })
       .catch((error) => {

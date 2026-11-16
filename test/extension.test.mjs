@@ -344,3 +344,14 @@ test('页面内核记的那一行 console.error 也抄一份，带插件名与�
   assert.match(sent[0].message, /usage: page\.mount/, '插件与部件名要在消息里')
   assert.match(sent[0].stack, /renderQuotas/, '错误对象的栈必须带上')
 })
+
+test('插件页取数挂了插件自己的前缀，失败回执不会被当成网页塞进帧', () => {
+  // 真机上撞过两次：路径少了 `/api/dsh-magpie` 前缀 → 宿主按「这个服务不开放该路径」挡回来；
+  // 那一发失败回执（正文是 JSON）又被当成网页塞进帧里，用户看到的是原始 JSON。两条都钉住。
+  const code = read(declared, 'magpie', 'pluginpages.js')
+  assert.match(code, /const HOST_PREFIX = "\/api\/dsh-magpie"/, '插件页的路径要挂在插件自己那条前缀下')
+  assert.match(code, /HOST_PREFIX \+ fromPath/, '取那一页的时候要带前缀')
+  assert.match(code, /HOST_PREFIX \+ pathName/, '取它引用的资源时也要带前缀')
+  assert.ok(code.includes('不是网页'), '正文像 JSON 时要当成失败回执，不能当网页')
+  assert.match(code, /f\.srcdoc = html/, '非 http(s) 下要把它塞进 srcdoc')
+})
