@@ -4,8 +4,13 @@
 
 ## 一句话
 
-新插件（本仓）**技术活已做完**：能装、能挂路由、扩展能被宿主发现、47 条守卫全绿。
+**宿主那一侧验通了**：能装、能挂路由、扩展能被宿主发现，`npm test` 53 条全绿 0 跳过；把它的
+路由在本机单独架起来真跑过一遍，magpie 网页版在 3430 起得来、`/api/dsh-magpie/api/state` 返回
+真数据。**手机那一侧没验过** —— 装到手机上的那一版怎么取数，端到端一次都没在设备上试过。
+
 卡在两件只有用户能做的事上：**发 npm**（本机没登录）与**真机验证**（设备要用户点名）。
+另外 App 侧那套硬编码入口、以及移动端插件里那份过渡副本都已经删了（比原计划早，
+见 `app-teardown.md`）—— 所以现在这台机器以外拿不到 magpie。
 
 ## 已完成（本地 git + 已推 GitHub 公开仓，9 版提交；**未发 npm**）
 
@@ -48,25 +53,19 @@
 1. `npm publish`（public，包名 `dsh-magpie-plugin`），确认 registry 能查到。
 2. 装进 profile：`node scripts/reload-dev.mjs`（自己 npm pack + 装 + 就地重载；探不到 dev 路由
    会退化成「装好、重启一次」并退出码 2，那是正常路径）。
-3. 真机：设置 → 扩展市场装 magpie（或本地开发那档导入），确认**扩展组出现一格 magpie**、
-   点开有数据（宿主日志里 `[dsh-magpie]` 有挂载记录）。
+3. 真机：设置 → 扩展里装 magpie（可安装段那条，装的时候会问一次「读宿主数据」，要同意），
+   然后右栏该多出一格 `magpie`、点开有数据。
 4. 第 3 步过了再动 App 侧拆除。
 
-## 未做：App 侧拆除（刻意押后，但现在知道它是必需的）
+## 已做：App 侧拆除（2026-11-12，早于真机验证）
 
-原因：新插件没铺开就删 App 入口，会让所有人的 magpie 当场打不开。必须等第 2、3 步真机验过。
+App 里那套硬编码的 magpie 入口已经拆掉了：`MagpieLogo.tsx`、`app/src/i18n/messages/magpie.ts`、
+`app/vendor/magpie-web/`、App 侧那个产包脚本与它的守卫整份删除，`RightRail.tsx` 的保留名表里
+也没有 `magpie` 了。移动端插件那份内置副本（`extensions/magpie/`、`lib/mobile/magpie-web.js`、
+`extension-data.js` 的静态 `SERVICES.magpie`）连同 `/api/mobile/v1/magpie/web` 一起在同一次
+提交里删掉 —— 按 `app-teardown.md` 的原计划，这最后一样本该等新插件铺开几版再清。
 
-要改的地方（DSH-mobile 仓，动手前先重读，别的对话也在改）：
-- `app/src/components/RightRail.tsx` 的 magpie 那格 + `reservedNames` 里 `magpie.rail`
-- `app/src/components/MagpieLogo.tsx`、`app/src/i18n/messages/magpie.ts`
-- `app/src/services/edge-rail-openers.ts` 的 `MAGPIE_EXTENSION_SLUG` / `openMagpieExtensionPage`
-- `app/src/hooks/useEdgeRailPages.ts`、`app/src/services/viewmodels/edge-rail-stack.ts` 的 magpie 档
-- `app/scripts/build-magpie-extension.mjs`、`app/scripts/test-magpie-extension.js`
-- `app/vendor/magpie-web/`、`app/src/App.tsx` 里 canvas/magpie 的 slug 判断
-- 各守卫里钉着 magpie 的断言
-
-移动端插件那份内置的（`dsh-mobile-plugin/extensions/magpie/`、`lib/mobile/magpie-web.js`、
-`extension-data.js` 的静态 `SERVICES.magpie`）**过渡期先留着** —— 老版本 App 走的是它。
+后果如实记着：老版本 App 上 magpie 的入口与取数都没了，而新插件还没发 npm。
 
 ## 本仓 git 操作约定
 
@@ -75,14 +74,17 @@
 
 ## 停在这里的原因（连续多轮同一个卡点）
 
-新插件这一段的技术工作已经全部做完并且验过：47 条守卫绿、打包产物解包实测可用、本地与
-GitHub 都在。往下的每一步都**必须由用户参与**，不是我能自己推进的：
+新插件这一段**开发者能自己验的都验过了**：53 条守卫全绿、打包产物解包实测可用、宿主侧端到端
+在本机真跑出过数据、本地与 GitHub 都在。剩下的一环验不了：**手机那一侧**（装上去之后怎么取数），
+而它恰恰是最容易出问题的一环。往下的每一步都**必须由用户参与**，不是我能自己推进的：
 
 1. `npm publish` —— 本机 `npm whoami` 连续返回 401（没登录），且发布上线本身要用户点头；
-2. 真机验证 —— 仓规写明设备要用户点名才能碰；
-3. 拆 App 侧那格 —— 依赖 1、2 先完成（见 `docs/app-teardown.md`）。
+2. 真机验证 —— 仓规写明设备要用户点名才能碰。
 
-所以「跑通」在目标定义里包含真机验证那一环，目前只能说到「代码与打包层面验过」。
+（原先这里的第 3 条是「拆 App 侧那格，依赖 1、2 先完成」—— 那一步在 2026-11-12 已经做了，
+顺序与原计划相反，见 `app-teardown.md`。）
+
+所以「跑通」在目标定义里包含真机验证那一环，目前只能说到「代码、打包与宿主侧端到端验过」。
 用户一旦给出 npm 凭据或点名设备验收，从这里继续即可。
 
 ## 本机实装进度（已做，2026-11-11）
@@ -97,20 +99,45 @@ GitHub 都在。往下的每一步都**必须由用户参与**，不是我能自
   见 `docs/decisions.md` 与 `test/bundles.test.mjs`。
 - 已在**真实 profile** 里验证发现链路（不是假目录）：移动端插件扫到了
   `slug=dsh-magpie-plugin.magpie`、`service=dsh-magpie`，入口页与 `icon.png` 都在。
-- 宿主重启前 `/api/dsh-magpie/*` 回 401 —— **注意这不是「路由没挂」的证据**：宿主对 `/api/*`
-  统一鉴权，随便编一个不存在的路径、连根路径 `/` 也是 401。判断挂没挂要看宿主日志里的
-  `[dsh-magpie] magpie 接口已挂到 /api/dsh-magpie` 那一行。
+- 宿主还没重启时的现场：**随便一条不存在的 `/api/…` 回 401（统一鉴权），但 `/api/dsh-magpie/…`
+  整段回的是空正文的 400** —— 这个前缀已经被启动列表占住、路由还没挂。所以看状态码就能分辨：
+  「400 = 装了没重启」，重启之后这个前缀由插件自己处理。别再拿 401 当「没挂」的证据：它对
+  未知路径同样成立，分不出是哪一种。
+- 宿主日志在**桌面 App** 启动时不落盘（它的标准输出接在 Electron 的管道上），所以 `[dsh-magpie]`
+  那一行看不到；要从终端起 DSH 才有。见作者文档第 9.3 节。
 
 ### 重启宿主后怎么验（用户要求自己挑时间重启）
 
 1. 重启 DSH 宿主（当前 GUI 那次重启会短暂断开，刷新页面即可）。
-2. 看宿主日志有没有 `[dsh-magpie] magpie 接口已挂到 /api/dsh-magpie`。
-3. 手机连上这台电脑，右栏扩展组里应出现一格 `magpie`（名字来自扩展包的 `entry`）。
-   注意：**App 里还硬编码着 magpie 那格且把它列进了保留名**，所以新扩展现在仍会被过滤 ——
-   要看到它，得先做 `docs/app-teardown.md` 里那一步，或者临时从「设置 → 扩展」里确认它已装好。
-4. 点开若数据为空，先查宿主日志与 magpie 网页版进程（`magpie web` 是否起来、端口 3430）。
+2. 状态码先看一眼：重启前 `/api/dsh-magpie/…` 回的是空正文 400（前缀已占、路由未挂），
+   重启之后这个前缀交给插件处理，不再是 400。
+3. 手机连上这台电脑：设置 → 扩展的可安装段里装 magpie，装的时候同意「读宿主数据」。装完右栏
+   多出一格 `magpie`（名字来自扩展包的 `entry`）—— App 侧那格硬编码与保留名已经拆掉了
+   （见下面的「已做：App 侧拆除」），所以不会再被过滤。
+4. 点开若数据为空，先看 magpie 网页版进程有没有起来（`magpie web`，端口 3430）；宿主日志
+   那行只在从终端起 DSH 时看得见。
 
 ## 已补：reload-dev 现在会登记 bundles
 
 原来少的那一步已经补上（见 `docs/decisions.md`），并且用脚本重装了一遍验证过：
 `✔ 已登记进启动列表`，第二次跑显示 `· 启动列表里本来就有，跳过`。
+
+## 2026-11-17 追记
+
+- **启动列表被摘掉之后又登记回来了**：11-17 01:16 那次操作把本插件（与画布一起）从
+  `dsh.profile.bundles` 里摘了，宿主日志里是 `enabled:false`。当天重新跑 `reload-dev` 登记回来。
+  注意「包装没装」与「在不在启动列表」是两件事：摘掉之后手机照样扫得到扩展（发现链路读的是
+  `node_modules`），但宿主那一半不会挂路由。
+- **扩展 1.0.1：复制复到手机上**。上游页面的「复制」第一步是请 magpie 把文本放进**运行 magpie
+  那台电脑**的剪贴板 —— 在手机上这一发成了也没用，用户在自己手机上粘不出来，页面还报「已复制」。
+  产包注入的改写里把 `POST /api/copy` 挡成失败响应，页面于是走自己的手机剪贴板路径。见
+  `web/SOURCE.md` 第 7 条，守卫 `test/extension.test.mjs` 里真跑那段注入脚本。
+- **首装不再报「重载失败」**：启动列表里刚加进插件、宿主还没重启时，宿主对 `/api/dsh-magpie/…`
+  回的是空正文 400；判词原来把它当失败（还让人「修好原因再跑」）。现在 400 分两种：空正文＝
+  还没重启，带 JSON＝插件那条闸真的拒了。见 `test/reload-verdict.test.mjs`。
+- **过期的本地开发拷贝挪走了**：`~/.dsh/extension-dev/magpie/`（11-11 那份）缺 `entry` 声明，
+  留着会让手机自动装出第二个没有右栏入口的 magpie —— 正好是「后补声明对已装的那台不生效」
+  那个坑。要再用开发路，先跑 `dev-install` 重新铺一份。
+- 手机那一侧仍然没验过。这一轮把「在这台电脑上能验的」都验到了：手机装扩展走的那条路
+  （整包下发 → 270 个文件逐个核对 → 落盘 → 记录里的入口 / 取数声明 / 三项能力）在内存盘上
+  真跑了一遍。
