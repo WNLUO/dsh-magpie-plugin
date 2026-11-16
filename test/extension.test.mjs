@@ -168,6 +168,9 @@ test('「复制」那一发不出页面：请电脑复制被挡成失败，正�
   assert.ok(injected, 'index.html 里找不到注入的改写脚本')
   const calls = []
   const fakeWindow = {
+    // 一条「健康」的记录：能力给了、宿主取数通道也装上了（`__dshHostFetch` 在）。
+    __DSH_EXTENSION__: { capabilities: ['content.read', 'card.write', 'host.data'] },
+    __dshHostFetch: () => Promise.resolve({ ok: true, status: 200 }),
     fetch: (input) => {
       calls.push(typeof input === 'string' ? input : String(input))
       return Promise.resolve({ ok: true, status: 200 })
@@ -185,4 +188,40 @@ test('「复制」那一发不出页面：请电脑复制被挡成失败，正�
 
   await pageFetch('https://example.com/x.json')
   assert.equal(calls[1], 'https://example.com/x.json', '外链必须原样放行')
+})
+
+test('取数通道没装上时，页面自己说清原因，而不是丢一句 failed to fetch', async () => {
+  // 真机上遇到的那种：页面显示得出来、数据全取不到，屏幕上只有一句 "failed to fetch"。
+  // 真正的原因（记录里没有 hostData、能力没授予）从页面里看不出来，所以注入脚本自检一次，
+  // 把原因画在页面上，并且**不让那一发去打一个注定失败的地址**。
+  const html = read(declared, 'magpie', 'index.html')
+  const injected = html.match(/<script>([\s\S]*?)<\/script>/)
+  assert.ok(injected)
+  const calls = []
+  const banners = []
+  const fakeWindow = {
+    // 一条「老的」记录：只有内容能力，没有 host.data；宿主的取数拦截因此没装上。
+    __DSH_EXTENSION__: { capabilities: ['content.read'] },
+    fetch: (input) => {
+      calls.push(typeof input === 'string' ? input : String(input))
+      return Promise.resolve({ ok: true, status: 200 })
+    },
+  }
+  const fakeDocument = {
+    body: { appendChild: (node) => banners.push(node) },
+    documentElement: { appendChild: (node) => banners.push(node) },
+    createElement: () => ({ setAttribute() {}, style: {}, textContent: '' }),
+  }
+  new Function('window', 'Response', 'document', injected[1])(fakeWindow, globalThis.Response, fakeDocument)
+
+  const res = await fakeWindow.fetch('/api/state')
+  assert.equal(res.status, 503, '通道不在时回一个明确的失败响应')
+  assert.equal((await res.json()).code, 'host-channel-missing')
+  assert.deepEqual(calls, [], '别再让那一发去打一个注定失败的地址')
+  assert.equal(banners.length, 1, '页面上要画一条说明')
+  assert.match(banners[0].textContent, /没有被授予「读宿主数据」/)
+
+  // 第二条请求不再重复画（同一条说明画一次就够）
+  await fakeWindow.fetch('/api/agents')
+  assert.equal(banners.length, 1)
 })

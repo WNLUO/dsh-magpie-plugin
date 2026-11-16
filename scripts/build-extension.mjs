@@ -52,7 +52,7 @@ export const EXTENSION_ID = 'com.dsh.magpie.extension'
 /** 扩展接口版本：只在「App 给扩展的东西变了」时抬（与 App RUNTIME_VERSION 无关）。 */
 export const EXTENSION_API_VERSION = '1'
 /** 扩展自己的版本号，不跟插件版本走：只有扩展包内容变了才抬。 */
-const EXTENSION_VERSION = '1.0.1'
+const EXTENSION_VERSION = '1.0.2'
 
 /**
  * 这个扩展声明要哪几项能力。
@@ -139,10 +139,52 @@ function rewriteShimScript() {
     if (p.indexOf(prefix + '/') === 0 || p === prefix) return p;
     return isApiPath(p) ? prefix + p : p;
   }
+  // 「取数通道没装上」的自我说明。
+  //
+  // 这一页能显示、数据全取不到时，手机上只会是一句 "failed to fetch" —— 而真正的原因（这条
+  // 记录里没有 hostData 声明、能力没授予、页面不是从扩展入口打开的）在页面里一点都看不出来，
+  // 每查一次都要人肉来回猜。所以自检一次，把原因直接写到页面上。
+  function hostDataMissing() {
+    var ctx = window.__DSH_EXTENSION__;
+    if (!ctx) return '这一页不是从扩展入口打开的（App 没注入桥）';
+    if (typeof window.__dshHostFetch !== 'function') {
+      var caps = ctx.capabilities || [];
+      if (caps.indexOf('host.data') < 0) return '这条记录没有被授予「读宿主数据」';
+      return '这条记录里没有 hostData 声明（装的时候没落进去，或者这是一条很老的记录）';
+    }
+    return '';
+  }
+  function complain(reason) {
+    if (window.__dshHostComplained) return;
+    window.__dshHostComplained = true;
+    try {
+      var box = document.createElement('div');
+      box.setAttribute('data-dsh-host-missing', '1');
+      box.style.cssText = 'position:fixed;z-index:2147483647;left:0;right:0;top:0;padding:10px 14px;'
+        + 'background:#7a1f1f;color:#fff;font:13px/1.5 -apple-system,system-ui,sans-serif;'
+        + 'white-space:normal;';
+      box.textContent = '取数通道没装上：' + reason
+        + '。页面能显示、数据取不到 —— 重装这个扩展一般就好；重装之后还在，就是插件那侧的问题。';
+      (document.body || document.documentElement).appendChild(box);
+    } catch (e) {
+      /* 画不出来也不能影响页面 */
+    }
+  }
   window.fetch = function (input, init) {
     if (typeof input === 'string') {
       var next = moved(input);
       if (next === copyPath) return Promise.resolve(new Response('', { status: 501 }));
+      if (next !== input) {
+        // 这条请求本该走宿主通道；通道不在就地说明，别再让它去打一个注定失败的地址。
+        var reason = hostDataMissing();
+        if (reason) {
+          complain(reason);
+          return Promise.resolve(new Response(
+            JSON.stringify({ code: 'host-channel-missing', message: reason }),
+            { status: 503, headers: { 'content-type': 'application/json' } },
+          ));
+        }
+      }
       return next === input ? original.call(this, input, init) : original.call(this, next, init);
     }
     return original.call(this, input, init);
